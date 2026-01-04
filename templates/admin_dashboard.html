@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Chit Fund Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Admin Dashboard</h2>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5>Total Users</h5>
+                <h2>{{ total_users }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5>Assigned Months</h5>
+                <h2>{{ assigned_months }}/{{ total_months }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5>Total Payments</h5>
+                <h2>{{ total_payments }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h5>Verified Payments</h5>
+                <h2>{{ verified_payments }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Month Assignments Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>S.No</th>
+                                <th>Month</th>
+                                <th>Installment</th>
+                                <th>Payment</th>
+                                <th>Assigned To</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in months_data %}
+                            <tr>
+                                <td>{{ item.month.month_number }}</td>
+                                <td><strong>{{ item.month.month_name }}</strong></td>
+                                <td>₹{{ "{:,.2f}".format(item.month.installment_amount) }}</td>
+                                <td>₹{{ "{:,.2f}".format(item.month.payment_amount) }}</td>
+                                <td>
+                                    {% if item.assigned_user %}
+                                    {{ item.assigned_user.full_name }}
+                                    {% else %}
+                                    <span class="text-muted">Not Assigned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.assigned_user %}
+                                    <span class="badge bg-success">Assigned</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Available</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5>Quick Actions</h5>
+                <a href="/admin/users" class="btn btn-primary me-2">Manage Users</a>
+                <a href="/admin/months" class="btn btn-success me-2">Assign Months</a>
+                <a href="/admin/payments" class="btn btn-info">View Payments</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

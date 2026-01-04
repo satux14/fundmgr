@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Chit Fund Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">My Chit Fund Dashboard</h2>
+        <p class="text-muted">Welcome, {{ user.full_name }}. View your installments and payment status below.</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Monthly Installments & Payments</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>S.No</th>
+                                <th>Month</th>
+                                <th>Monthly Installment</th>
+                                <th>Monthly Payment</th>
+                                <th>Taken</th>
+                                <th>Payment Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for month in months %}
+                            <tr class="{% if month.is_taken %}table-success{% endif %}">
+                                <td>{{ month.month_number }}</td>
+                                <td><strong>{{ month.month_name }}</strong></td>
+                                <td>₹{{ "{:,.2f}".format(month.installment_amount) }}</td>
+                                <td>₹{{ "{:,.2f}".format(month.payment_amount) }}</td>
+                                <td>
+                                    {% if month.is_taken %}
+                                    <span class="badge bg-success">✓ Taken</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Not Taken</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if month.payment_status == "verified" %}
+                                    <span class="badge bg-success">Verified</span>
+                                    {% elif month.payment_status == "pending" %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Not Paid</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not month.payment_status %}
+                                    <button class="btn btn-sm btn-primary mark-payment" data-month-id="{{ month.id }}">
+                                        Mark as Paid
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5>How It Works</h5>
+                <ul class="mb-0">
+                    <li>Monthly installment should be done before the 10th of every month.</li>
+                    <li>Monthly Payment will be paid on the 11th of every month or when all installments are paid.</li>
+                    <li>10 members participate, each paying a monthly installment as shown in the table.</li>
+                    <li>Each month, ONE member receives the Monthly Payment.</li>
+                    <li>Members choose their preferred month on a first-come, first-served basis.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const markPaymentButtons = document.querySelectorAll('.mark-payment');
+    markPaymentButtons.forEach(button => {
+        button.addEventListener('click', async function() {
+            const monthId = this.dataset.monthId;
+            try {
+                const response = await fetch('/api/user/payments', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `month_id=${monthId}`
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('Payment marked successfully! Waiting for admin verification.');
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.detail || 'Failed to mark payment'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
+
