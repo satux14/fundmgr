@@ -5,7 +5,32 @@
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <h2 class="mb-4">Month Assignments</h2>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="mb-0">Month Assignments</h2>
+                {% if current_fund %}
+                <p class="text-muted mb-0">{{ current_fund.name }}</p>
+                {% endif %}
+            </div>
+            <div>
+                {% if current_fund and all_funds and all_funds|length > 1 %}
+                <div class="dropdown d-inline-block">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="fundDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        Switch Fund
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="fundDropdown">
+                        {% for fund in all_funds %}
+                        <li>
+                            <a class="dropdown-item {% if fund.id == current_fund.id %}active{% endif %}" href="/admin/months?fund_id={{ fund.id }}" onclick="console.log('=== CLICK: Switching to fund ==='); console.log('Fund ID:', {{ fund.id }}); console.log('Fund Name:', '{{ fund.name }}'); console.log('Current URL before click:', window.location.href); console.log('Target URL:', '/admin/months?fund_id={{ fund.id }}'); return true;">
+                                {{ fund.name }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 
@@ -30,31 +55,63 @@
                         </thead>
                         <tbody>
                             {% for item in months_data %}
-                            <tr>
+                            <tr class="month-row" style="cursor: pointer;" data-month-id="{{ item.month.id }}" data-month-name="{{ item.month.month_name }}" onclick="openMonthDetailsModal({{ item.month.id }}, '{{ item.month.month_name }}')">
                                 <td>{{ item.month.month_number }}</td>
                                 <td><strong>{{ item.month.month_name }}</strong></td>
-                                <td>₹{{ "{:,.2f}".format(item.month.installment_amount) }}</td>
-                                <td>₹{{ "{:,.2f}".format(item.month.payment_amount) }}</td>
+                                <td onclick="event.stopPropagation();">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span>₹{{ "{:,.2f}".format(item.month.installment_amount) }}</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="editInstallment({{ item.month.id }}, {{ item.month.installment_amount }})" title="Edit Installment">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                                                <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                                <td onclick="event.stopPropagation();">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span>₹{{ "{:,.2f}".format(item.month.payment_amount) }}</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="editPayment({{ item.month.id }}, {{ item.month.payment_amount }})" title="Edit Payment">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                                                <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
                                 <td>
-                                    {% if item.assigned_user %}
-                                    <span class="badge bg-success">{{ item.assigned_user.full_name }}</span>
+                                    {% if item.assigned_user_display %}
+                                    <span class="badge bg-success" title="{% if item.assigned_user_display.full_name %}{{ item.assigned_user_display.full_name }}{% endif %}">
+                                        {{ item.assigned_user_display.display_name }}
+                                        {% if item.assigned_user_display.customer_id %}
+                                        <span class="badge bg-info">({{ item.assigned_user_display.customer_id }})</span>
+                                        {% endif %}
+                                    </span>
                                     {% else %}
                                     <span class="badge bg-secondary">Not Assigned</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    <form method="POST" action="/admin/assign-month" class="d-inline">
+                                <td onclick="event.stopPropagation();">
+                                    {% if item.assigned_user_display %}
+                                    <span class="badge bg-success me-2" title="{% if item.assigned_user_display.full_name %}{{ item.assigned_user_display.full_name }}{% endif %}">
+                                        {{ item.assigned_user_display.display_name }}
+                                        {% if item.assigned_user_display.customer_id %}
+                                        <span class="badge bg-info">({{ item.assigned_user_display.customer_id }})</span>
+                                        {% endif %}
+                                    </span>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="openAssignModal({{ item.month.id }}, {{ item.assigned_user.id }}, '{{ item.assigned_user_display.display_name }}')">
+                                        Change
+                                    </button>
+                                    <form method="POST" action="/admin/monthly-payment/mark-received" class="d-inline ms-1 mark-payment-received-form" data-amount="{{ item.month.payment_amount }}" data-user="{{ item.assigned_user_display.display_name }}">
                                         <input type="hidden" name="month_id" value="{{ item.month.id }}">
-                                        <select name="user_id" class="form-select form-select-sm d-inline-block" style="width: auto;">
-                                            <option value="">-- Select User --</option>
-                                            {% for user in users %}
-                                            <option value="{{ user.id }}" {% if item.assigned_user and item.assigned_user.id == user.id %}selected{% endif %}>
-                                                {{ user.full_name }}
-                                            </option>
-                                            {% endfor %}
-                                        </select>
-                                        <button type="submit" class="btn btn-sm btn-primary ms-2">Assign</button>
+                                        <button type="submit" class="btn btn-sm btn-success">
+                                            Mark Payment Received
+                                        </button>
                                     </form>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="openAssignModal({{ item.month.id }}, null, null)">
+                                        Select
+                                    </button>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -65,5 +122,421 @@
         </div>
     </div>
 </div>
+
+<!-- Assign Month Modal -->
+<div class="modal fade" id="assignMonthModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Month</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="assignMonthForm" method="POST" action="/admin/assign-month{% if current_fund %}?fund_id={{ current_fund.id }}{% endif %}">
+                    <input type="hidden" id="modalMonthId" name="month_id">
+                    <div class="mb-3">
+                        <label for="modalUserId" class="form-label">Select User</label>
+                        <select name="user_id" id="modalUserId" class="form-select" required>
+                            <option value="">-- Select User --</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitAssignForm()">Assign</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Month Details Modal -->
+<div class="modal fade" id="monthDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Installment Payment Status - <span id="modalMonthName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>S.No</th>
+                                <th>User Name</th>
+                                <th>Payment Status</th>
+                                <th>Paid At</th>
+                                <th>Marked By</th>
+                                <th>Verified By</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="monthDetailsTableBody">
+                            <!-- Will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Store month details data for JavaScript access
+const monthDetailsData = {
+    {% for item in months_data %}
+    {{ item.month.id }}: {
+        month_name: '{{ item.month.month_name }}',
+        member_payments: [
+            {% for mp in item.member_payments %}
+            {
+                user: {
+                    id: {{ mp.user.id }},
+                    full_name: '{{ mp.user.full_name|replace("'", "\\'") }}',
+                    display_name: '{{ mp.user_display.display_name|replace("'", "\\'") }}',
+                    customer_id: '{{ mp.user_display.customer_id or ""|replace("'", "\\'") }}',
+                    alias: '{{ mp.user_display.alias or ""|replace("'", "\\'") }}'
+                },
+                payment: {% if mp.payment %}{
+                    id: {{ mp.payment.id }},
+                    paid_at: '{{ mp.payment.paid_at.strftime("%Y-%m-%d %H:%M:%S") if mp.payment.paid_at else "" }}',
+                    marked_by_user: {% if mp.payment.marked_by_user %}{
+                        full_name: '{{ mp.payment.marked_by_user.full_name|replace("'", "\\'") }}'
+                    }{% else %}null{% endif %},
+                    verified_by_user: {% if mp.payment.verified_by_user %}{
+                        full_name: '{{ mp.payment.verified_by_user.full_name|replace("'", "\\'") }}'
+                    }{% else %}null{% endif %}
+                }{% else %}null{% endif %},
+                status: '{{ mp.status or "not_paid" }}'
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ]
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+// Debug: Log the data structure
+console.log('=== Month Details Data ===');
+console.log('Total months:', Object.keys(monthDetailsData).length);
+Object.keys(monthDetailsData).forEach(monthId => {
+    const data = monthDetailsData[monthId];
+    console.log(`Month ${monthId} (${data.month_name}): ${data.member_payments.length} members`);
+});
+
+console.log('=== Admin months page loaded ===');
+const urlParams = new URLSearchParams(window.location.search);
+const urlFundId = urlParams.get('fund_id');
+console.log('Current fund ID from URL:', urlFundId);
+console.log('Full URL:', window.location.href);
+console.log('All URL params:', Object.fromEntries(urlParams));
+console.log('All cookies (JS-readable):', document.cookie);
+console.log('Page title:', document.title);
+
+function openAssignModal(monthId, currentUserId, currentUserName) {
+    document.getElementById('modalMonthId').value = monthId;
+    const select = document.getElementById('modalUserId');
+    select.value = currentUserId || '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('assignMonthModal'));
+    modal.show();
+}
+
+function submitAssignForm() {
+    const form = document.getElementById('assignMonthForm');
+    const userId = document.getElementById('modalUserId').value;
+    
+    if (!userId) {
+        alert('Please select a user');
+        return;
+    }
+    
+    form.submit();
+}
+
+function openMonthDetailsModal(monthId, monthName) {
+    // Find the month data from the template
+    const monthData = monthDetailsData[monthId];
+    if (!monthData) {
+        alert('Month data not found for month ID: ' + monthId);
+        console.error('Available month IDs:', Object.keys(monthDetailsData));
+        return;
+    }
+    
+    console.log('Opening modal for month:', monthName, 'ID:', monthId);
+    console.log('Member payments count:', monthData.member_payments ? monthData.member_payments.length : 0);
+    console.log('Member payments data:', monthData.member_payments);
+    
+    // Set modal title
+    document.getElementById('modalMonthName').textContent = monthName;
+    
+    // Populate table
+    const tbody = document.getElementById('monthDetailsTableBody');
+    tbody.innerHTML = '';
+    
+    if (!monthData.member_payments || monthData.member_payments.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No fund members found</td></tr>';
+        console.warn('No member payments data found for month:', monthId);
+        return;
+    }
+    
+    monthData.member_payments.forEach((memberPayment, index) => {
+        const row = document.createElement('tr');
+        const payment = memberPayment.payment;
+        const status = memberPayment.status;
+        
+        let statusBadge = '';
+        if (status === 'verified') {
+            statusBadge = '<span class="badge bg-success">Verified</span>';
+        } else if (status === 'pending') {
+            statusBadge = '<span class="badge bg-warning">Pending</span>';
+        } else if (status === 'rejected') {
+            statusBadge = '<span class="badge bg-danger">Rejected</span>';
+        } else {
+            statusBadge = '<span class="badge bg-secondary">Not Paid</span>';
+        }
+        
+        // Build actions column
+        let actionsHtml = '';
+        if (payment && payment.id) {
+            if (status === 'pending') {
+                actionsHtml = `
+                    <button class="btn btn-sm btn-success" onclick="verifyPaymentFromModal(${payment.id}, ${monthId})">Verify</button>
+                    <button class="btn btn-sm btn-danger" onclick="rejectPaymentFromModal(${payment.id}, ${monthId})">Reject</button>
+                `;
+            } else if (status === 'verified') {
+                actionsHtml = '<span class="text-muted">Verified</span>';
+            } else if (status === 'rejected') {
+                actionsHtml = `
+                    <button class="btn btn-sm btn-success" onclick="verifyPaymentFromModal(${payment.id}, ${monthId})">Verify</button>
+                `;
+            }
+        } else {
+            // No payment record - allow admin to mark as paid
+            actionsHtml = `
+                <button class="btn btn-sm btn-primary" onclick="markPaymentAsPaid(${memberPayment.user.id}, ${monthId})">Mark as Paid</button>
+            `;
+        }
+        
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${memberPayment.user.display_name || memberPayment.user.full_name}${memberPayment.user.customer_id ? ' (' + memberPayment.user.customer_id + ')' : ''}</td>
+            <td>${statusBadge}</td>
+            <td>${payment && payment.paid_at ? new Date(payment.paid_at).toLocaleString() : '-'}</td>
+            <td>${payment && payment.marked_by_user ? payment.marked_by_user.full_name : '-'}</td>
+            <td>${payment && payment.verified_by_user ? payment.verified_by_user.full_name : '-'}</td>
+            <td>${actionsHtml}</td>
+        `;
+        tbody.appendChild(row);
+    });
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('monthDetailsModal'));
+    modal.show();
+}
+
+function verifyPaymentFromModal(paymentId, monthId) {
+    if (!confirm('Are you sure you want to verify this payment?')) {
+        return;
+    }
+    
+    fetch('/admin/payments/verify', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `payment_id=${paymentId}`
+    })
+    .then(response => {
+        if (response.ok) {
+            // Reload page to get fresh data
+            location.reload();
+        } else {
+            alert('Error verifying payment');
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+    });
+}
+
+function rejectPaymentFromModal(paymentId, monthId) {
+    if (!confirm('Are you sure you want to reject this payment?')) {
+        return;
+    }
+    
+    fetch('/admin/payments/reject', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: `payment_id=${paymentId}`
+    })
+    .then(response => {
+        if (response.ok) {
+            // Reload page to get fresh data
+            location.reload();
+        } else {
+            alert('Error rejecting payment');
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+    });
+}
+
+function markPaymentAsPaid(userId, monthId) {
+    if (!confirm('Mark this payment as paid on behalf of the user?')) {
+        return;
+    }
+    
+    fetch('/admin/payments/mark-on-behalf', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `month_id=${monthId}&user_id=${userId}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            // Reload the modal data
+            const monthName = document.getElementById('modalMonthName').textContent;
+            const foundMonthId = Object.keys(monthDetailsData).find(id => {
+                return monthDetailsData[id].month_name === monthName;
+            });
+            if (foundMonthId) {
+                // Reload page to get fresh data
+                location.reload();
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Error marking payment');
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+    });
+}
+
+// Log when dropdown items are clicked
+document.addEventListener('DOMContentLoaded', function() {
+    const dropdownItems = document.querySelectorAll('#fundDropdown + .dropdown-menu .dropdown-item');
+    console.log('Found', dropdownItems.length, 'dropdown items');
+    dropdownItems.forEach((item, index) => {
+        item.addEventListener('click', function(e) {
+            const href = this.getAttribute('href');
+            const fundId = new URL(href, window.location.origin).searchParams.get('fund_id');
+            console.log('=== EVENT LISTENER: Dropdown item clicked ===');
+            console.log('Index:', index);
+            console.log('Fund ID:', fundId);
+            console.log('Fund Name:', this.textContent.trim());
+            console.log('Href:', href);
+            console.log('Current fund ID from template:', {{ current_fund.id }});
+        });
+    });
+    
+    // Log the current fund from the template
+    console.log('Current fund from template:', {
+        id: {{ current_fund.id }},
+        name: '{{ current_fund.name }}'
+    });
+    
+    // Handle mark payment received form submission
+    const markPaymentForms = document.querySelectorAll('.mark-payment-received-form');
+    markPaymentForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const amount = parseFloat(this.dataset.amount);
+            const user = this.dataset.user;
+            const formattedAmount = '₹' + amount.toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            const message = 'Mark monthly payment of ' + formattedAmount + ' as received by ' + user + '?';
+            if (!confirm(message)) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    });
+});
+
+// Edit Installment Amount
+function editInstallment(monthId, currentAmount) {
+    const newAmount = prompt(`Edit Installment Amount:\n\nCurrent: ₹${currentAmount.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}\n\nEnter new amount:`, currentAmount);
+    
+    if (newAmount === null) return; // User cancelled
+    
+    const amount = parseFloat(newAmount);
+    if (isNaN(amount) || amount < 0) {
+        alert('Please enter a valid positive number');
+        return;
+    }
+    
+    fetch(`/api/dashboard/month/${monthId}/installment`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ amount: amount })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert('Installment amount updated successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.detail || 'Failed to update installment amount'));
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+    });
+}
+
+// Edit Payment Amount
+function editPayment(monthId, currentAmount) {
+    const newAmount = prompt(`Edit Payment Amount:\n\nCurrent: ₹${currentAmount.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}\n\nEnter new amount:`, currentAmount);
+    
+    if (newAmount === null) return; // User cancelled
+    
+    const amount = parseFloat(newAmount);
+    if (isNaN(amount) || amount < 0) {
+        alert('Please enter a valid positive number');
+        return;
+    }
+    
+    fetch(`/api/dashboard/month/${monthId}/payment`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ amount: amount })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert('Payment amount updated successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.detail || 'Failed to update payment amount'));
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+    });
+}
+</script>
 {% endblock %}
 

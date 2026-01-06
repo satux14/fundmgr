@@ -5,15 +5,68 @@
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <h2 class="mb-4">Payment Management</h2>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="mb-0">Payment Management</h2>
+                {% if current_fund %}
+                <p class="text-muted mb-0">{{ current_fund.name }}</p>
+                {% endif %}
+            </div>
+            <div>
+                {% if current_fund and all_funds and all_funds|length > 1 %}
+                <div class="dropdown d-inline-block me-2">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="fundDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        Switch Fund
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="fundDropdown">
+                        {% for fund in all_funds %}
+                        <li>
+                            <a class="dropdown-item {% if fund.id == current_fund.id %}active{% endif %}" href="/admin/payments?fund_id={{ fund.id }}">
+                                {{ fund.name }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                <a href="/admin/payments" class="btn btn-outline-secondary">Select Different Fund</a>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="row">
     <div class="col-12">
-        <div class="card">
+        <div class="card mb-4">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">All Installment Payments</h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Monthly Installment Payments (All Members Pay)</h5>
+                    <div class="d-flex gap-2 align-items-center">
+                        <form method="GET" action="/admin/payments" class="d-flex gap-2 align-items-center">
+                            <input type="hidden" name="fund_id" value="{{ current_fund.id }}">
+                            <label class="text-white mb-0 me-1">Filter:</label>
+                            <select name="filter_month_id" class="form-select form-select-sm" onchange="this.form.submit();" style="width: auto;">
+                                <option value="">All Months</option>
+                                {% for month in months %}
+                                <option value="{{ month.id }}" {% if filter_month_id and filter_month_id|int == month.id %}selected{% endif %}>
+                                    {{ month.month_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <select name="filter_user_id" class="form-select form-select-sm" onchange="this.form.submit();" style="width: auto;">
+                                <option value="">All Users</option>
+                                {% for u in users_with_payments %}
+                                <option value="{{ u.id }}" {% if filter_user_id and filter_user_id|int == u.id %}selected{% endif %}>
+                                    {{ u.full_name }}{% if u.customer_id %} ({{ u.customer_id }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            {% if filter_month_id or filter_user_id %}
+                            <a href="/admin/payments?fund_id={{ current_fund.id }}" class="btn btn-sm btn-outline-light">Clear</a>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -23,6 +76,7 @@
                                 <th>ID</th>
                                 <th>User</th>
                                 <th>Month</th>
+                                <th>Amount</th>
                                 <th>Paid At</th>
                                 <th>Marked By</th>
                                 <th>Status</th>
@@ -31,16 +85,112 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for payment in payments %}
+                            {% for item in installment_payments %}
+                            {% set payment = item.payment %}
                             <tr>
                                 <td>{{ payment.id }}</td>
-                                <td>{{ payment.user.full_name }}</td>
+                                <td>
+                                    {{ item.user_display.display_name }}
+                                    {% if item.user_display.customer_id %}
+                                    <span class="badge bg-info">({{ item.user_display.customer_id }})</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ payment.month.month_name }}</td>
+                                <td>₹{{ "{:,.2f}".format(payment.month.installment_amount) }}</td>
                                 <td>{{ payment.paid_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if item.marked_by_display %}
+                                    {{ item.marked_by_display.display_name }}
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if payment.status == "verified" %}
+                                    <span class="badge bg-success">Verified</span>
+                                    {% elif payment.status == "rejected" %}
+                                    <span class="badge bg-danger">Rejected</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.verified_by_display %}
+                                    {{ item.verified_by_display.display_name }}
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if payment.status == "pending" %}
+                                    <form method="POST" action="/admin/payments/verify" class="d-inline">
+                                        <input type="hidden" name="payment_id" value="{{ payment.id }}">
+                                        <button type="submit" class="btn btn-sm btn-success me-1">Verify</button>
+                                    </form>
+                                    <form method="POST" action="/admin/payments/reject" class="d-inline">
+                                        <input type="hidden" name="payment_id" value="{{ payment.id }}">
+                                        <button type="submit" class="btn btn-sm btn-danger me-1" onclick="return confirm('Are you sure you want to reject this payment?');">Reject</button>
+                                    </form>
+                                    {% elif payment.status == "verified" %}
+                                    <span class="badge bg-success me-2">Verified</span>
+                                    <form method="POST" action="/admin/payments/delete" class="d-inline">
+                                        <input type="hidden" name="payment_id" value="{{ payment.id }}">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this verified payment? This action cannot be undone.');">Delete</button>
+                                    </form>
+                                    {% elif payment.status == "rejected" %}
+                                    <span class="badge bg-danger me-2">Rejected</span>
+                                    <form method="POST" action="/admin/payments/delete" class="d-inline">
+                                        <input type="hidden" name="payment_id" value="{{ payment.id }}">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this payment? This action cannot be undone.');">Delete</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Monthly Payments Received (Assigned Person Gets Payment)</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Month</th>
+                                <th>Assigned User</th>
+                                <th>Amount</th>
+                                <th>Received At</th>
+                                <th>Marked By</th>
+                                <th>Status</th>
+                                <th>Verified By</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in monthly_payments %}
+                            <tr>
+                                <td>{{ payment.id }}</td>
+                                <td>{{ payment.month.month_name }}</td>
+                                <td>{{ payment.user.full_name }}</td>
+                                <td>₹{{ "{:,.2f}".format(payment.amount) }}</td>
+                                <td>{{ payment.received_at.strftime('%Y-%m-%d %H:%M') }}</td>
                                 <td>{{ payment.marked_by_user.full_name }}</td>
                                 <td>
                                     {% if payment.status == "verified" %}
                                     <span class="badge bg-success">Verified</span>
+                                    {% elif payment.status == "rejected" %}
+                                    <span class="badge bg-danger">Rejected</span>
                                     {% else %}
                                     <span class="badge bg-warning">Pending</span>
                                     {% endif %}
@@ -53,13 +203,27 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if payment.status != "verified" %}
-                                    <form method="POST" action="/admin/payments/verify" class="d-inline">
+                                    {% if payment.status == "pending" %}
+                                    <form method="POST" action="/admin/monthly-payment/verify" class="d-inline">
                                         <input type="hidden" name="payment_id" value="{{ payment.id }}">
-                                        <button type="submit" class="btn btn-sm btn-success">Verify</button>
+                                        <button type="submit" class="btn btn-sm btn-success me-1">Verify</button>
                                     </form>
-                                    {% else %}
-                                    <span class="badge bg-success">Verified</span>
+                                    <form method="POST" action="/admin/monthly-payment/reject" class="d-inline">
+                                        <input type="hidden" name="payment_id" value="{{ payment.id }}">
+                                        <button type="submit" class="btn btn-sm btn-danger me-1" onclick="return confirm('Are you sure you want to reject this payment?');">Reject</button>
+                                    </form>
+                                    {% elif payment.status == "verified" %}
+                                    <span class="badge bg-success me-2">Verified</span>
+                                    <form method="POST" action="/admin/monthly-payment/delete" class="d-inline">
+                                        <input type="hidden" name="payment_id" value="{{ payment.id }}">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this verified payment? This action cannot be undone.');">Delete</button>
+                                    </form>
+                                    {% elif payment.status == "rejected" %}
+                                    <span class="badge bg-danger me-2">Rejected</span>
+                                    <form method="POST" action="/admin/monthly-payment/delete" class="d-inline">
+                                        <input type="hidden" name="payment_id" value="{{ payment.id }}">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this payment? This action cannot be undone.');">Delete</button>
+                                    </form>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -71,5 +235,18 @@
         </div>
     </div>
 </div>
+
+{% if current_fund %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5>Quick Actions</h5>
+                <p class="mb-0">To mark a monthly payment as received, go to the <a href="/admin/months?fund_id={{ current_fund.id }}" class="text-white"><u>Month Assignments</u></a> page and use the "Mark Payment Received" button for assigned months.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 

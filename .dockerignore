@@ -31,7 +31,6 @@ env/
 *.sqlite
 *.sqlite3
 data/*.db
-data-prod/*.db
 
 # IDE
 .vscode/
@@ -50,4 +49,14 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+docker-compose.dev.yml
+.dockerignore
 

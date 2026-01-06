@@ -1,9 +1,9 @@
 """
 Script to seed initial data for the chit fund management system.
-Run this once to populate the database with month data and create admin user.
+Run this once to populate the database with fund, month data and create admin user.
 """
 from app.database import SessionLocal, engine, Base
-from app.models import User, Month
+from app.models import User, Month, Fund
 from app.auth import get_password_hash
 
 # Create tables
@@ -12,11 +12,38 @@ Base.metadata.create_all(bind=engine)
 db = SessionLocal()
 
 try:
-    # Check if months already exist
-    existing_months = db.query(Month).count()
-    if existing_months > 0:
-        print("Months already exist. Skipping seed.")
+    # Check if admin user exists, create if not
+    admin_user = db.query(User).filter(User.username == "admin").first()
+    if not admin_user:
+        admin_user = User(
+            username="admin",
+            password_hash=get_password_hash("admin123"),
+            full_name="Administrator",
+            role="admin"
+        )
+        db.add(admin_user)
+        db.flush()  # Get the admin user ID
+        print("Created admin user (username: admin, password: admin123)")
     else:
+        print("Admin user already exists.")
+    
+    # Check if default fund exists
+    default_fund = db.query(Fund).filter(Fund.name == "1.5 Lakh Scheme - 2026").first()
+    if not default_fund:
+        # Create default fund
+        default_fund = Fund(
+            name="NewYear2026 Scheme",
+            description="Default chit fund scheme",
+            total_amount=150000.0,
+            number_of_months=10,
+            created_by=admin_user.id
+        )
+        db.add(default_fund)
+        db.flush()  # Get the fund ID
+        
+        # Add admin as member
+        default_fund.members.append(admin_user)
+        
         # Create months data from the image
         months_data = [
             {"month_name": "Jan", "month_number": 1, "installment_amount": 12450.0, "payment_amount": 123000.0},
@@ -32,24 +59,12 @@ try:
         ]
         
         for month_data in months_data:
-            month = Month(**month_data, year=2026)
+            month = Month(**month_data, fund_id=default_fund.id, year=2026)
             db.add(month)
         
-        print("Created 10 months of data.")
-    
-    # Check if admin user exists
-    admin_user = db.query(User).filter(User.username == "admin").first()
-    if not admin_user:
-        admin_user = User(
-            username="admin",
-            password_hash=get_password_hash("admin123"),
-            full_name="Administrator",
-            role="admin"
-        )
-        db.add(admin_user)
-        print("Created admin user (username: admin, password: admin123)")
+        print("Created default fund '1.5 Lakh Scheme - 2026' with 10 months of data.")
     else:
-        print("Admin user already exists.")
+        print("Default fund already exists. Skipping fund and month creation.")
     
     db.commit()
     print("Database seeded successfully!")

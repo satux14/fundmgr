@@ -1,0 +1,23 @@
+version: '3.8'
+
+# Production docker-compose configuration
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+# Runs on port 3435
+
+services:
+  fundmgr-app-prod:
+    build: .
+    ports:
+      - "0.0.0.0:3435:3434"
+    volumes:
+      # Mount only data directory for persistence (no code mounting for production)
+      - ./data-prod:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 3434)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

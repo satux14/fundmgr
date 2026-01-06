@@ -61,6 +61,19 @@ body {
         padding: 0.25rem 0.5rem;
         font-size: 0.875rem;
     }
+    
+    /* Make navbar menu always visible on mobile */
+    .navbar-collapse {
+        display: block !important;
+    }
+    
+    .navbar-nav {
+        flex-direction: column;
+    }
+    
+    .navbar-nav .nav-item {
+        margin-bottom: 0.5rem;
+    }
 }
 
 /* Loading states */
@@ -72,5 +85,47 @@ body {
 /* Success/Error messages */
 .alert {
     border-radius: 4px;
+}
+
+/* Editable cells */
+.editable {
+    position: relative;
+}
+
+.editable .editable-value {
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.editable .editable-value:hover {
+    background-color: #f0f0f0;
+    cursor: pointer;
+}
+
+.editable .editable-input {
+    min-width: 120px;
+}
+
+.editable .editable-input.form-select {
+    min-width: 180px;
+}
+
+.editable .editable-value::after {
+    content: ' ✏️';
+    opacity: 0.5;
+    font-size: 0.8em;
+}
+
+.editable:hover .editable-value::after {
+    opacity: 1;
+}
+
+/* Smaller buttons in Actions column */
+.pay-installment-btn,
+.mark-monthly-payment-received {
+    padding: 0.2rem 0.4rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
 }
 

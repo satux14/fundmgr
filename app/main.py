@@ -4,13 +4,18 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from app.database import engine, Base
-from app.routers import auth, users, admin, payments
+from app.routers import auth, users, admin, payments, funds
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
 # Create FastAPI app
-app = FastAPI(title="Chit Fund Management System")
+app = FastAPI(title="Fund Management System")
 
 # CORS middleware
 app.add_middleware(
@@ -28,13 +33,19 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(funds.router)
 app.include_router(users.router)
 app.include_router(admin.router)
 app.include_router(payments.router)
 
-# Root redirect to login
+# Root redirect
 @app.get("/")
-async def root():
+async def root(request: Request):
+    from fastapi import Request as FastAPIRequest
+    # Check if user is logged in
+    token = request.cookies.get("access_token")
+    if token:
+        return RedirectResponse(url="/funds")
     return RedirectResponse(url="/login")
 
 # Custom middleware to handle token from cookie
@@ -58,5 +69,5 @@ app.add_middleware(CookieAuthMiddleware)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=3434)
 

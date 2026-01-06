@@ -25,7 +25,81 @@ A web-based chit fund management system built with FastAPI where 10 users partic
 - **Frontend**: HTML5, CSS3, JavaScript, Bootstrap 5
 - **Templates**: Jinja2
 
-## Installation
+## Quick Start with Docker (Recommended)
+
+The easiest way to run the application is using Docker:
+
+### Development Mode (Port 3434)
+
+```bash
+# Clone the repository
+git clone https://github.com/satux14/fundmgr.git
+cd fundmgr
+
+# Start with Docker (development mode with auto-reload)
+docker-compose -f docker-compose.dev.yml up
+
+# Or use the convenience script
+./docker-start.sh
+```
+
+The application will be available at: **http://localhost:3434**
+
+### Production Mode (Port 3435)
+
+```bash
+# Start production server
+docker-compose -f docker-compose.prod.yml up -d
+
+# Or use the convenience script
+./docker-start-prod.sh
+```
+
+The production application will be available at: **http://localhost:3435**
+
+**Note:** Production mode uses a separate database directory (`data-prod/`) and does not mount the source code for better security and performance.
+
+### Copying Data from Dev to Prod
+
+To copy the development database to production:
+
+```bash
+./copy-dev-to-prod.sh
+```
+
+This will copy `data/fundmgr.db` to `data-prod/fundmgr.db` and you'll need to restart the production container.
+
+**Default Admin Login:**
+- Username: `admin`
+- Password: `admin123`
+
+The database will be automatically seeded on first run.
+
+### Docker Commands
+
+**Development Mode** (with live code reload):
+```bash
+docker-compose -f docker-compose.dev.yml up
+```
+
+**Production Mode**:
+```bash
+docker-compose up -d
+```
+
+**View logs**:
+```bash
+docker-compose logs -f
+```
+
+**Stop containers**:
+```bash
+docker-compose down
+```
+
+For more Docker details, see [DOCKER_README.md](DOCKER_README.md)
+
+## Manual Installation (Without Docker)
 
 1. **Clone the repository**
    ```bash
@@ -51,11 +125,11 @@ A web-based chit fund management system built with FastAPI where 10 users partic
 
 5. **Run the application**
    ```bash
-   uvicorn app.main:app --reload
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 3434
    ```
 
 6. **Access the application**
-   - Open browser and go to: `http://localhost:8000`
+   - Open browser and go to: `http://localhost:3434`
    - Default admin login:
      - Username: `admin`
      - Password: `admin123`

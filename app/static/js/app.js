@@ -1,8 +1,8 @@
 // Main application JavaScript
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-hide alerts after 5 seconds
-    const alerts = document.querySelectorAll('.alert');
+    // Auto-hide alerts after 5 seconds (except assigned month alert)
+    const alerts = document.querySelectorAll('.alert.alert-dismissible:not(.assigned-month-alert)');
     alerts.forEach(alert => {
         setTimeout(() => {
             const bsAlert = new bootstrap.Alert(alert);

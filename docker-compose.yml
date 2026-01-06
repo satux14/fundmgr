@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  fundmgr-app:
+    build: .
+    ports:
+      - "0.0.0.0:3434:3434"
+    volumes:
+      # Mount entire project directory for live development
+      - .:/app
+      # Mount data directory separately for persistence
+      - ./data:/app/data
+      # Exclude build artifacts
+      - /app/__pycache__
+      - /app/.git
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 3434)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

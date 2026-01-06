@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Select Fund - Month Assignments{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Month Assignments</h2>
+        <p class="text-muted">Select a fund to manage month assignments.</p>
+    </div>
+</div>
+
+{% if funds %}
+<div class="row">
+    {% for fund in funds %}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 fund-card" onclick="window.location.href='/admin/months?fund_id={{ fund.id }}'" style="cursor: pointer;">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">{{ fund.name }}</h5>
+            </div>
+            <div class="card-body">
+                {% if fund.description %}
+                <p class="text-muted">{{ fund.description }}</p>
+                {% endif %}
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="mb-2">
+                            <strong class="d-block">Total Amount</strong>
+                            <span class="text-primary">₹{{ "{:,.0f}".format(fund.total_amount) }}</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="mb-2">
+                            <strong class="d-block">Months</strong>
+                            <span>{{ fund.months|length }}/{{ fund.number_of_months }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">Created: {{ fund.created_at.strftime('%Y-%m-%d') }}</small>
+                    <a href="/admin/months?fund_id={{ fund.id }}" class="btn btn-sm btn-primary" onclick="event.stopPropagation();">Manage Months</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <h5>No Funds Available</h5>
+            <p>Create a fund first to manage month assignments.</p>
+            <a href="/funds/create" class="btn btn-primary">Create New Fund</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.fund-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.fund-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+</style>
+{% endblock %}
+

@@ -57,8 +57,12 @@
                                 <th>ID</th>
                                 <th>Username</th>
                                 <th>Full Name</th>
+                                <th>Customer ID</th>
+                                <th>Alias</th>
                                 <th>Role</th>
+                                <th>Funds</th>
                                 <th>Created At</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -68,13 +72,33 @@
                                 <td>{{ u.username }}</td>
                                 <td>{{ u.full_name }}</td>
                                 <td>
+                                    <span class="badge bg-info">{{ u.customer_id or 'Not Set' }}</span>
+                                </td>
+                                <td>
+                                    <span id="alias-{{ u.id }}">{{ u.alias or '-' }}</span>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editAlias({{ u.id }}, '{{ u.alias or '' }}')">Edit</button>
+                                </td>
+                                <td>
                                     {% if u.role == "admin" %}
                                     <span class="badge bg-danger">Admin</span>
                                     {% else %}
                                     <span class="badge bg-primary">User</span>
                                     {% endif %}
                                 </td>
+                                <td>
+                                    {% if u.funds %}
+                                        {% for fund in u.funds %}
+                                            <a href="/dashboard?fund_id={{ fund.id }}" class="badge bg-success text-decoration-none me-1">{{ fund.name }}</a>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">No funds</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editCustomerId({{ u.id }}, '{{ u.customer_id or '' }}')">Edit Customer ID</button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="resetPassword({{ u.id }}, '{{ u.username }}')">Reset Password</button>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -84,5 +108,125 @@
         </div>
     </div>
 </div>
+
+<!-- Edit Alias Modal -->
+<div class="modal fade" id="editAliasModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Alias</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editAliasForm" method="POST" action="/admin/users/update-alias">
+                    <input type="hidden" id="aliasUserId" name="user_id">
+                    <div class="mb-3">
+                        <label for="aliasValue" class="form-label">Alias</label>
+                        <input type="text" class="form-control" id="aliasValue" name="alias" placeholder="Enter alias (optional)">
+                        <small class="form-text text-muted">This will be shown to other users instead of your real name for privacy.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Customer ID Modal -->
+<div class="modal fade" id="editCustomerIdModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Customer ID</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editCustomerIdForm" method="POST" action="/admin/users/update-customer-id">
+                    <input type="hidden" id="customerIdUserId" name="user_id">
+                    <div class="mb-3">
+                        <label for="customerIdValue" class="form-label">Customer ID</label>
+                        <input type="text" class="form-control" id="customerIdValue" name="customer_id" placeholder="e.g., C001" required>
+                        <small class="form-text text-muted">Unique identifier for this customer. Must be unique.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="resetPasswordForm" method="POST" action="/admin/users/reset-password">
+                    <input type="hidden" id="resetPasswordUserId" name="user_id">
+                    <div class="mb-3">
+                        <label class="form-label">User</label>
+                        <input type="text" class="form-control" id="resetPasswordUsername" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="resetPasswordNew" class="form-label">New Password</label>
+                        <input type="password" class="form-control" id="resetPasswordNew" name="new_password" required minlength="3">
+                        <small class="form-text text-muted">Password must be at least 3 characters long.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="resetPasswordConfirm" class="form-label">Confirm New Password</label>
+                        <input type="password" class="form-control" id="resetPasswordConfirm" name="confirm_password" required minlength="3">
+                    </div>
+                    <button type="submit" class="btn btn-warning">Reset Password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function editAlias(userId, currentAlias) {
+    document.getElementById('aliasUserId').value = userId;
+    document.getElementById('aliasValue').value = currentAlias || '';
+    const modal = new bootstrap.Modal(document.getElementById('editAliasModal'));
+    modal.show();
+}
+
+function editCustomerId(userId, currentCustomerId) {
+    document.getElementById('customerIdUserId').value = userId;
+    document.getElementById('customerIdValue').value = currentCustomerId || '';
+    const modal = new bootstrap.Modal(document.getElementById('editCustomerIdModal'));
+    modal.show();
+}
+
+function resetPassword(userId, username) {
+    document.getElementById('resetPasswordUserId').value = userId;
+    document.getElementById('resetPasswordUsername').value = username;
+    document.getElementById('resetPasswordNew').value = '';
+    document.getElementById('resetPasswordConfirm').value = '';
+    const modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+    modal.show();
+}
+
+// Validate password match on form submit
+document.getElementById('resetPasswordForm').addEventListener('submit', function(e) {
+    const newPassword = document.getElementById('resetPasswordNew').value;
+    const confirmPassword = document.getElementById('resetPasswordConfirm').value;
+    
+    if (newPassword !== confirmPassword) {
+        e.preventDefault();
+        alert('New password and confirmation do not match!');
+        return false;
+    }
+    
+    if (newPassword.length < 3) {
+        e.preventDefault();
+        alert('Password must be at least 3 characters long!');
+        return false;
+    }
+});
+</script>
 {% endblock %}
 

@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Create New Fund - Fund Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Create New Fund</h2>
+    </div>
+</div>
+
+<form id="createFundForm" method="POST" action="/funds/create">
+    <!-- Fund Basic Info -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Fund Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">Fund Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="total_amount" class="form-label">Total Amount <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control" id="total_amount" name="total_amount" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="description" class="form-label">Description (Optional)</label>
+                            <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="number_of_months" class="form-label">Number of Months</label>
+                            <input type="number" class="form-control" id="number_of_months" name="number_of_months" value="1" min="1" readonly>
+                            <small class="text-muted">Auto-calculated from month table rows</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Month Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Month Details</h5>
+                    <button type="button" class="btn btn-light btn-sm" onclick="addMonthRow()">
+                        + Add Row
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="monthsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 60px;">S.No</th>
+                                    <th>Month</th>
+                                    <th>Installment Amount</th>
+                                    <th>Payment Amount</th>
+                                    <th style="width: 150px;">Assign</th>
+                                    <th style="width: 100px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthsTableBody">
+                                <tr class="month-row">
+                                    <td class="text-center">1</td>
+                                    <td>
+                                        <input type="text" class="form-control month-name" name="month_name[]" placeholder="Jan, Feb, Mar..." required>
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" class="form-control installment-amount" name="installment_amount[]" placeholder="0.00" required>
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" class="form-control payment-amount" name="payment_amount[]" placeholder="0.00" required>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">Not Assigned</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="removeMonthRow(this)" disabled>
+                                            ×
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submit Buttons -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between">
+                <a href="/funds" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Create Fund</button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let rowCounter = 1;
+
+function addMonthRow() {
+    const tbody = document.getElementById('monthsTableBody');
+    const firstRow = tbody.querySelector('.month-row');
+    const newRow = firstRow.cloneNode(true);
+    
+    rowCounter++;
+    
+    // Update S.No
+    newRow.querySelector('td:first-child').textContent = rowCounter;
+    
+    // Clear input values
+    newRow.querySelector('.month-name').value = '';
+    newRow.querySelector('.installment-amount').value = '';
+    newRow.querySelector('.payment-amount').value = '';
+    
+    // Enable remove button
+    const removeBtn = newRow.querySelector('button');
+    removeBtn.disabled = false;
+    removeBtn.onclick = function() { removeMonthRow(this); };
+    
+    tbody.appendChild(newRow);
+    updateMonthCount();
+}
+
+function removeMonthRow(button) {
+    const row = button.closest('tr');
+    const tbody = document.getElementById('monthsTableBody');
+    
+    if (tbody.children.length <= 1) {
+        alert('At least one month row is required.');
+        return;
+    }
+    
+    row.remove();
+    renumberRows();
+    updateMonthCount();
+}
+
+function renumberRows() {
+    const rows = document.querySelectorAll('#monthsTableBody .month-row');
+    rows.forEach((row, index) => {
+        row.querySelector('td:first-child').textContent = index + 1;
+        
+        // Enable/disable remove button
+        const removeBtn = row.querySelector('button');
+        removeBtn.disabled = (rows.length <= 1);
+    });
+}
+
+function updateMonthCount() {
+    const rowCount = document.querySelectorAll('#monthsTableBody .month-row').length;
+    document.getElementById('number_of_months').value = rowCount;
+}
+
+function validateForm() {
+    const rows = document.querySelectorAll('#monthsTableBody .month-row');
+    let isValid = true;
+    let errors = [];
+    
+    rows.forEach((row, index) => {
+        const monthName = row.querySelector('.month-name').value.trim();
+        const installment = row.querySelector('.installment-amount').value;
+        const payment = row.querySelector('.payment-amount').value;
+        
+        if (!monthName) {
+            errors.push(`Row ${index + 1}: Month name is required`);
+            isValid = false;
+        }
+        if (!installment || parseFloat(installment) <= 0) {
+            errors.push(`Row ${index + 1}: Installment amount must be greater than 0`);
+            isValid = false;
+        }
+        if (!payment || parseFloat(payment) <= 0) {
+            errors.push(`Row ${index + 1}: Payment amount must be greater than 0`);
+            isValid = false;
+        }
+    });
+    
+    if (!isValid) {
+        alert('Please fix the following errors:\n\n' + errors.join('\n'));
+        return false;
+    }
+    
+    return true;
+}
+
+// Form submission handler
+document.getElementById('createFundForm').addEventListener('submit', function(e) {
+    if (!validateForm()) {
+        e.preventDefault();
+        return false;
+    }
+    
+    // Serialize months data
+    const rows = document.querySelectorAll('#monthsTableBody .month-row');
+    const monthsData = [];
+    
+    rows.forEach((row) => {
+        monthsData.push({
+            month_name: row.querySelector('.month-name').value.trim(),
+            installment_amount: parseFloat(row.querySelector('.installment-amount').value),
+            payment_amount: parseFloat(row.querySelector('.payment-amount').value)
+        });
+    });
+    
+    // Add months data as hidden input
+    const monthsInput = document.createElement('input');
+    monthsInput.type = 'hidden';
+    monthsInput.name = 'months_data';
+    monthsInput.value = JSON.stringify(monthsData);
+    this.appendChild(monthsInput);
+    
+    return true;
+});
+
+// Initialize
+updateMonthCount();
+</script>
+{% endblock %}
+

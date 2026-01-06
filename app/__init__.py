@@ -1,2 +1,2 @@
-# Chit Fund Management System
+# Fund Management System
 

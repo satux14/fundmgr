@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Dashboard - Chit Fund Management{% endblock %}
+{% block title %}Admin Dashboard - Fund Management{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -9,102 +9,188 @@
     </div>
 </div>
 
+<!-- Statistics Cards -->
 <div class="row mb-4">
-    <div class="col-md-3">
+    <div class="col-md-4">
         <div class="card bg-primary text-white">
             <div class="card-body">
                 <h5>Total Users</h5>
-                <h2>{{ total_users }}</h2>
+                <h3>{{ total_users }}</h3>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
         <div class="card bg-success text-white">
             <div class="card-body">
-                <h5>Assigned Months</h5>
-                <h2>{{ assigned_months }}/{{ total_months }}</h2>
+                <h5>Total Funds</h5>
+                <h3>{{ total_funds }}</h3>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
         <div class="card bg-info text-white">
             <div class="card-body">
-                <h5>Total Payments</h5>
-                <h2>{{ total_payments }}</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-warning text-white">
-            <div class="card-body">
-                <h5>Verified Payments</h5>
-                <h2>{{ verified_payments }}</h2>
+                <h5>Quick Actions</h5>
+                <a href="/funds/create" class="btn btn-light btn-sm">Create Fund</a>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Funds Overview -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Month Assignments Overview</h5>
+                <h5 class="mb-0">Funds Overview</h5>
             </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th>S.No</th>
-                                <th>Month</th>
-                                <th>Installment</th>
-                                <th>Payment</th>
-                                <th>Assigned To</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in months_data %}
-                            <tr>
-                                <td>{{ item.month.month_number }}</td>
-                                <td><strong>{{ item.month.month_name }}</strong></td>
-                                <td>₹{{ "{:,.2f}".format(item.month.installment_amount) }}</td>
-                                <td>₹{{ "{:,.2f}".format(item.month.payment_amount) }}</td>
-                                <td>
-                                    {% if item.assigned_user %}
-                                    {{ item.assigned_user.full_name }}
-                                    {% else %}
-                                    <span class="text-muted">Not Assigned</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if item.assigned_user %}
-                                    <span class="badge bg-success">Assigned</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">Available</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                {% if funds_data %}
+                <div class="row">
+                    {% for item in funds_data %}
+                    <div class="col-md-4 mb-4">
+                        <div class="card h-100 fund-card" onclick="window.location.href='/funds/{{ item.fund.id }}'" style="cursor: pointer;">
+                            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">{{ item.fund.name }}</h6>
+                                <button class="btn btn-sm btn-light" onclick="event.stopPropagation(); editFundName({{ item.fund.id }}, '{{ item.fund.name }}'); return false;" title="Edit Fund Name">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                {% if item.fund.description %}
+                                <p class="text-muted small">{{ item.fund.description }}</p>
+                                {% endif %}
+                                <div class="row text-center">
+                                    <div class="col-6">
+                                        <div class="mb-2">
+                                            <strong class="d-block">Total Amount</strong>
+                                            <span class="text-primary">₹{{ "{:,.0f}".format(item.fund.total_amount) }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="mb-2">
+                                            <strong class="d-block">Months</strong>
+                                            <span>{{ item.months_count }}/{{ item.fund.number_of_months }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <hr>
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <small class="text-muted d-block">Members</small>
+                                        <strong>{{ item.members_count }}</strong>
+                                    </div>
+                                    <div class="col-4">
+                                        <small class="text-muted d-block">Assigned</small>
+                                        <strong>{{ item.assignments_count }}</strong>
+                                    </div>
+                                    <div class="col-4">
+                                        <small class="text-muted d-block">Payments</small>
+                                        <strong>{{ item.payments_count }}</strong>
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-center">
+                                    <small class="text-muted">Verified: {{ item.verified_payments }}</small>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-light">
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">Created: {{ item.fund.created_at.strftime('%Y-%m-%d') }}</small>
+                                    <a href="/admin/months?fund_id={{ item.fund.id }}" class="btn btn-sm btn-primary" onclick="event.stopPropagation();">Manage</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <h5>No Funds Available</h5>
+                    <p>Create your first fund to get started.</p>
+                    <a href="/funds/create" class="btn btn-primary">Create New Fund</a>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body">
-                <h5>Quick Actions</h5>
-                <a href="/admin/users" class="btn btn-primary me-2">Manage Users</a>
-                <a href="/admin/months" class="btn btn-success me-2">Assign Months</a>
-                <a href="/admin/payments" class="btn btn-info">View Payments</a>
+<!-- Edit Fund Name Modal -->
+<div class="modal fade" id="editFundModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Fund Name</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editFundForm">
+                    <input type="hidden" id="editFundId" name="fund_id">
+                    <div class="mb-3">
+                        <label for="editFundName" class="form-label">Fund Name</label>
+                        <input type="text" class="form-control" id="editFundName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editFundDescription" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="editFundDescription" name="description" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveFundName()">Save Changes</button>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
+{% block extra_js %}
+<script>
+function editFundName(fundId, currentName) {
+    document.getElementById('editFundId').value = fundId;
+    document.getElementById('editFundName').value = currentName;
+    
+    // Fetch current description
+    fetch(`/api/funds/${fundId}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('editFundDescription').value = data.description || '';
+            const modal = new bootstrap.Modal(document.getElementById('editFundModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error fetching fund details:', error);
+            const modal = new bootstrap.Modal(document.getElementById('editFundModal'));
+            modal.show();
+        });
+}
+
+function saveFundName() {
+    const fundId = document.getElementById('editFundId').value;
+    const name = document.getElementById('editFundName').value;
+    const description = document.getElementById('editFundDescription').value;
+    
+    fetch(`/api/funds/${fundId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            name: name,
+            description: description
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error updating fund:', error);
+        alert('Error updating fund. Please try again.');
+    });
+}
+</script>
+{% endblock %}

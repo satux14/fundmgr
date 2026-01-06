@@ -1,0 +1,31 @@
+version: '3.8'
+
+# Development docker-compose with entire project directory mounted from host
+# Usage: docker-compose -f docker-compose.dev.yml up
+# Changes to any file will be reflected immediately
+
+services:
+  fundmgr-app:
+    build: .
+    ports:
+      - "0.0.0.0:3434:3434"
+    volumes:
+      # Mount entire project directory for live development
+      - .:/app
+      # Mount data directory separately for persistence
+      - ./data:/app/data
+      # Exclude build artifacts and git directory
+      - /app/__pycache__
+      - /app/.git
+      - /app/*.pyc
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    # Override command to enable auto-reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 3434 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 3434)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
