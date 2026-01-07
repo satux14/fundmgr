@@ -95,7 +95,7 @@
                             </div>
                             <div class="card-footer bg-light">
                                 <div class="d-flex justify-content-between">
-                                    <small class="text-muted">Created: {{ item.fund.created_at.strftime('%Y-%m-%d') }}</small>
+                                    <small class="text-muted">Created: {{ item.fund.created_at | ist('%Y-%m-%d') }}</small>
                                     <a href="/admin/months?fund_id={{ item.fund.id }}" class="btn btn-sm btn-primary" onclick="event.stopPropagation();">Manage</a>
                                 </div>
                             </div>

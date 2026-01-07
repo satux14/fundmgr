@@ -97,7 +97,7 @@
                                 </td>
                                 <td>{{ payment.month.month_name }}</td>
                                 <td>₹{{ "{:,.2f}".format(payment.month.installment_amount) }}</td>
-                                <td>{{ payment.paid_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ payment.paid_at | ist('%Y-%m-%d %H:%M') }}</td>
                                 <td>
                                     {% if item.marked_by_display %}
                                     {{ item.marked_by_display.display_name }}
@@ -184,7 +184,7 @@
                                 <td>{{ payment.month.month_name }}</td>
                                 <td>{{ payment.user.full_name }}</td>
                                 <td>₹{{ "{:,.2f}".format(payment.amount) }}</td>
-                                <td>{{ payment.received_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ payment.received_at | ist('%Y-%m-%d %H:%M') }}</td>
                                 <td>{{ payment.marked_by_user.full_name }}</td>
                                 <td>
                                     {% if payment.status == "verified" %}

@@ -7,11 +7,26 @@ from app.database import get_db
 from app.auth import get_current_user, get_current_admin_user
 from app.models import User, Fund, Month, UserMonthAssignment, InstallmentPayment
 from app.helpers import get_user_display_info
+from app.audit import log_action
 
 router = APIRouter()
 import os
 template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
 templates = Jinja2Templates(directory=template_dir)
+
+# Add IST timezone filter to templates
+from app.timezone_utils import utc_to_ist
+import pytz
+IST = pytz.timezone('Asia/Kolkata')
+
+def format_ist(dt, format_str='%Y-%m-%d %H:%M:%S'):
+    """Jinja2 filter to format datetime in IST"""
+    if dt is None:
+        return None
+    ist_dt = utc_to_ist(dt)
+    return ist_dt.strftime(format_str)
+
+templates.env.filters['ist'] = format_ist
 
 @router.get("/funds", response_class=HTMLResponse)
 async def funds_dashboard(
@@ -19,17 +34,27 @@ async def funds_dashboard(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Get funds - admin sees all, users see only their funds
+    # Get funds - admin sees all (including archived), users see only active funds they're members of, guests see guest-visible funds
     if current_user.role == "admin":
-        funds = db.query(Fund).all()
+        # Admin sees all funds including archived, but not deleted
+        funds = db.query(Fund).filter(Fund.is_deleted == False).all()
+    elif current_user.role == "guest":
+        # Guest users see only guest-visible, active (non-archived, non-deleted) funds
+        funds = db.query(Fund).filter(
+            Fund.guest_visible == True,
+            Fund.is_archived == False,
+            Fund.is_deleted == False
+        ).all()
     else:
-        # Query funds where user is a member using the association table
+        # Regular users see only active (non-archived, non-deleted) funds they're members of
         from app.models import fund_members
         from sqlalchemy import select
         funds = db.query(Fund).join(
             fund_members, Fund.id == fund_members.c.fund_id
         ).filter(
-            fund_members.c.user_id == current_user.id
+            fund_members.c.user_id == current_user.id,
+            Fund.is_archived == False,
+            Fund.is_deleted == False
         ).all()
     
     # Get statistics for each fund
@@ -165,6 +190,25 @@ async def create_fund(
         db.add(month)
     
     db.commit()
+    db.refresh(fund)
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="FUND_CREATED",
+        action_description=f"Fund created: {name} - Total Amount: ₹{total_amount:,.2f}, Months: {number_of_months}",
+        request=request,
+        fund_id=fund.id,
+        details={
+            "fund_id": fund.id,
+            "name": name,
+            "description": description,
+            "total_amount": float(total_amount),
+            "number_of_months": number_of_months,
+            "months_count": len(months_list)
+        }
+    )
     
     return RedirectResponse(url=f"/dashboard?fund_id={fund.id}", status_code=302)
 
@@ -272,10 +316,19 @@ async def join_fund(
     db: Session = Depends(get_db)
 ):
     """Allow users to join a fund"""
+    # Guest users cannot join funds
+    if current_user.role == "guest":
+        raise HTTPException(status_code=403, detail="Guest users cannot join funds")
+    
     fund = db.query(Fund).filter(Fund.id == fund_id).first()
     
     if not fund:
         raise HTTPException(status_code=404, detail="Fund not found")
+    
+    # Check if fund is archived or deleted - non-admin users cannot join
+    if current_user.role != "admin":
+        if fund.is_deleted or fund.is_archived:
+            raise HTTPException(status_code=404, detail="Fund not found")
     
     # Admin can't join (they're already members or can access all)
     if current_user.role == "admin":
@@ -301,8 +354,17 @@ async def get_fund(
     if not fund:
         raise HTTPException(status_code=404, detail="Fund not found")
     
+    # Check if fund is archived or deleted - non-admin users cannot access
+    if current_user.role != "admin":
+        if fund.is_deleted or fund.is_archived:
+            raise HTTPException(status_code=404, detail="Fund not found")
+    
     # Check access
-    if current_user.role != "admin" and current_user not in fund.members:
+    if current_user.role == "guest":
+        # Guest users can only access guest-visible funds
+        if not fund.guest_visible:
+            raise HTTPException(status_code=403, detail="You don't have access to this fund")
+    elif current_user.role != "admin" and current_user not in fund.members:
         raise HTTPException(status_code=403, detail="You don't have access to this fund")
     
     return {
@@ -312,6 +374,38 @@ async def get_fund(
         "total_amount": fund.total_amount,
         "number_of_months": fund.number_of_months
     }
+
+@router.post("/api/funds/{fund_id}/toggle-guest-visible")
+async def toggle_guest_visible(
+    fund_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Toggle guest visibility for a fund"""
+    fund = db.query(Fund).filter(Fund.id == fund_id).first()
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    
+    fund.guest_visible = not fund.guest_visible
+    db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="FUND_GUEST_VISIBILITY_TOGGLED",
+        action_description=f"Guest visibility {'enabled' if fund.guest_visible else 'disabled'} for fund: {fund.name}",
+        request=request,
+        fund_id=fund_id,
+        details={
+            "fund_id": fund_id,
+            "fund_name": fund.name,
+            "guest_visible": fund.guest_visible
+        }
+    )
+    
+    return {"message": f"Guest visibility {'enabled' if fund.guest_visible else 'disabled'}", "guest_visible": fund.guest_visible}
 
 @router.put("/api/funds/{fund_id}")
 async def update_fund(
@@ -330,4 +424,117 @@ async def update_fund(
     
     db.commit()
     return {"message": "Fund updated successfully"}
+
+@router.post("/funds/{fund_id}/archive")
+async def archive_fund(
+    fund_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    fund = db.query(Fund).filter(Fund.id == fund_id, Fund.is_deleted == False).first()
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    
+    fund.is_archived = True
+    db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="FUND_ARCHIVED",
+        action_description=f"Fund archived: {fund.name}",
+        request=request,
+        fund_id=fund_id,
+        details={
+            "fund_id": fund_id,
+            "name": fund.name,
+            "total_amount": float(fund.total_amount) if fund.total_amount else None
+        }
+    )
+    
+    # Return JSON for AJAX or redirect for form submission
+    if request.headers.get("Accept") == "application/json" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return {"message": "Fund archived successfully", "fund_id": fund_id}
+    return RedirectResponse(url="/funds", status_code=302)
+
+@router.post("/funds/{fund_id}/unarchive")
+async def unarchive_fund(
+    fund_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    fund = db.query(Fund).filter(Fund.id == fund_id, Fund.is_deleted == False).first()
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    
+    fund.is_archived = False
+    db.commit()
+    
+    # Return JSON for AJAX or redirect for form submission
+    if request.headers.get("Accept") == "application/json" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return {"message": "Fund unarchived successfully", "fund_id": fund_id}
+    return RedirectResponse(url="/funds", status_code=302)
+
+@router.post("/funds/{fund_id}/delete")
+async def delete_fund(
+    fund_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    fund = db.query(Fund).filter(Fund.id == fund_id, Fund.is_deleted == False).first()
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    
+    # Delete all associated data
+    # 1. Delete all installment payments for months in this fund
+    from app.models import MonthlyPaymentReceived
+    months = db.query(Month).filter(Month.fund_id == fund_id).all()
+    month_ids = [m.id for m in months]
+    
+    if month_ids:
+        # Delete installment payments
+        db.query(InstallmentPayment).filter(InstallmentPayment.month_id.in_(month_ids)).delete(synchronize_session=False)
+        # Delete monthly payments received
+        db.query(MonthlyPaymentReceived).filter(MonthlyPaymentReceived.month_id.in_(month_ids)).delete(synchronize_session=False)
+        # Delete user month assignments
+        db.query(UserMonthAssignment).filter(UserMonthAssignment.month_id.in_(month_ids)).delete(synchronize_session=False)
+        # Delete months (cascade should handle this, but being explicit)
+        db.query(Month).filter(Month.fund_id == fund_id).delete(synchronize_session=False)
+    
+    # Delete fund members associations
+    from app.models import fund_members
+    db.execute(fund_members.delete().where(fund_members.c.fund_id == fund_id))
+    
+    # Mark fund as deleted
+    # Get fund details before deleting
+    fund_name = fund.name
+    fund_total = fund.total_amount
+    
+    fund.is_deleted = True
+    db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="FUND_DELETED",
+        action_description=f"Fund deleted: {fund_name}",
+        request=request,
+        fund_id=fund_id,
+        details={
+            "fund_id": fund_id,
+            "name": fund_name,
+            "total_amount": float(fund_total) if fund_total else None,
+            "number_of_months": fund.number_of_months
+        }
+    )
+    
+    # Return JSON for AJAX or redirect for form submission
+    if request.headers.get("Accept") == "application/json" or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return {"message": "Fund deleted successfully", "fund_id": fund_id}
+    return RedirectResponse(url="/funds", status_code=302)
 

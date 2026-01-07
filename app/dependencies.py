@@ -25,6 +25,11 @@ def get_current_fund(
     if not fund:
         raise HTTPException(status_code=404, detail="Fund not found")
     
+    # Check if fund is archived or deleted - non-admin users cannot access
+    if current_user.role != "admin":
+        if fund.is_deleted or fund.is_archived:
+            raise HTTPException(status_code=404, detail="Fund not found")
+    
     # Check access - admin can access all, users only their funds
     if current_user.role != "admin" and current_user not in fund.members:
         raise HTTPException(status_code=403, detail="You don't have access to this fund")
@@ -72,6 +77,12 @@ def get_optional_fund(
     if not fund:
         logger.info(f"get_optional_fund: Fund with id {fund_id_int} not found in database")
         return None
+    
+    # Check if fund is archived or deleted - non-admin users cannot access
+    if current_user.role != "admin":
+        if fund.is_deleted or fund.is_archived:
+            logger.info(f"get_optional_fund: Fund {fund_id_int} is archived/deleted, user {current_user.id} cannot access")
+            return None
     
     # Check access - admin can access all, users only their funds
     if current_user.role != "admin" and current_user not in fund.members:

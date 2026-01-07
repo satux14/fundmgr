@@ -27,6 +27,21 @@ try:
     else:
         print("Admin user already exists.")
     
+    # Check if guest user exists, create if not
+    guest_user = db.query(User).filter(User.username == "guest").first()
+    if not guest_user:
+        guest_user = User(
+            username="guest",
+            password_hash=get_password_hash("guest"),
+            full_name="Guest User",
+            role="guest",
+            customer_id="GUEST"
+        )
+        db.add(guest_user)
+        print("Created guest user (username: guest, password: guest)")
+    else:
+        print("Guest user already exists.")
+    
     # Check if default fund exists
     default_fund = db.query(Fund).filter(Fund.name == "1.5 Lakh Scheme - 2026").first()
     if not default_fund:

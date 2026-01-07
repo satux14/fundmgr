@@ -51,12 +51,34 @@
     {% for item in funds_data %}
     <div class="col-md-4 mb-4">
         <div class="card h-100 fund-card" onclick="window.location.href='/dashboard?fund_id={{ item.fund.id }}'" style="cursor: pointer;">
-            <div class="card-header {% if user.role == 'admin' %}bg-secondary text-white d-flex justify-content-between align-items-center{% else %}bg-primary text-white{% endif %}">
-                <h6 class="mb-0">{{ item.fund.name }}</h6>
+            <div class="card-header {% if user.role == 'admin' %}bg-secondary text-white d-flex justify-content-between align-items-center{% else %}bg-primary text-white{% endif %} {% if item.fund.is_archived %}opacity-75{% endif %}">
+                <div class="d-flex align-items-center gap-2">
+                    <h6 class="mb-0">{{ item.fund.name }}</h6>
+                    {% if item.fund.is_archived %}
+                    <span class="badge bg-warning">Archived</span>
+                    {% endif %}
+                </div>
                 {% if user.role == "admin" %}
-                <button class="btn btn-sm btn-light" onclick="event.stopPropagation(); editFundName({{ item.fund.id }}, '{{ item.fund.name }}'); return false;" title="Edit Fund Name">
-                    <i class="bi bi-pencil"></i>
-                </button>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-light" onclick="event.stopPropagation(); editFundName({{ item.fund.id }}, '{{ item.fund.name }}'); return false;" title="Edit Fund Name">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm {{ 'btn-info' if item.fund.guest_visible else 'btn-outline-info' }}" onclick="event.stopPropagation(); toggleGuestVisible({{ item.fund.id }}); return false;" title="{{ 'Hide from Guests' if item.fund.guest_visible else 'Show to Guests' }}">
+                        <i class="bi bi-eye{{ '-slash' if not item.fund.guest_visible else '' }}"></i>
+                    </button>
+                    {% if item.fund.is_archived %}
+                    <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); unarchiveFund({{ item.fund.id }}); return false;" title="Unarchive Fund">
+                        <i class="bi bi-archive"></i>
+                    </button>
+                    {% else %}
+                    <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); archiveFund({{ item.fund.id }}); return false;" title="Archive Fund">
+                        <i class="bi bi-archive"></i>
+                    </button>
+                    {% endif %}
+                    <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteFund({{ item.fund.id }}, '{{ item.fund.name }}'); return false;" title="Delete Fund">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
                 {% endif %}
             </div>
             <div class="card-body">
@@ -103,7 +125,7 @@
             </div>
             <div class="card-footer bg-light">
                 <div class="d-flex justify-content-between align-items-center">
-                    <small class="text-muted">Created: {{ item.fund.created_at.strftime('%Y-%m-%d') }}</small>
+                    <small class="text-muted">Created: {{ item.fund.created_at | ist('%Y-%m-%d') }}</small>
                     {% if user.role == "admin" %}
                     <a href="/admin/months?fund_id={{ item.fund.id }}" class="btn btn-sm btn-primary" onclick="event.stopPropagation();">Manage</a>
                     {% endif %}
@@ -126,7 +148,6 @@
     </div>
 </div>
 {% endif %}
-{% endblock %}
 
 {% if user.role == "admin" %}
 <!-- Edit Fund Name Modal -->
@@ -158,6 +179,7 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -176,28 +198,153 @@
 {% block extra_js %}
 <script>
 function editFundName(fundId, currentName) {
-    document.getElementById('editFundId').value = fundId;
-    document.getElementById('editFundName').value = currentName;
+    const editFundId = document.getElementById('editFundId');
+    const editFundName = document.getElementById('editFundName');
+    const editFundDescription = document.getElementById('editFundDescription');
+    const editFundModal = document.getElementById('editFundModal');
+    
+    if (!editFundId || !editFundName || !editFundDescription || !editFundModal) {
+        console.error('Modal elements not found');
+        alert('Error: Could not find edit form elements');
+        return;
+    }
+    
+    editFundId.value = fundId;
+    editFundName.value = currentName || '';
     
     // Fetch current description
     fetch(`/api/funds/${fundId}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            document.getElementById('editFundDescription').value = data.description || '';
-            const modal = new bootstrap.Modal(document.getElementById('editFundModal'));
+            editFundDescription.value = data.description || '';
+            const modal = new bootstrap.Modal(editFundModal);
             modal.show();
         })
         .catch(error => {
             console.error('Error fetching fund details:', error);
-            const modal = new bootstrap.Modal(document.getElementById('editFundModal'));
+            // Still show modal even if fetch fails
+            editFundDescription.value = '';
+            const modal = new bootstrap.Modal(editFundModal);
             modal.show();
         });
 }
 
+function archiveFund(fundId) {
+    if (!confirm('Are you sure you want to archive this fund? Users will not be able to see it.')) {
+        return;
+    }
+    
+    fetch(`/funds/${fundId}/archive`, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error archiving fund:', error);
+        alert('Error archiving fund');
+    });
+}
+
+function unarchiveFund(fundId) {
+    if (!confirm('Are you sure you want to unarchive this fund? Users will be able to see it again.')) {
+        return;
+    }
+    
+    fetch(`/funds/${fundId}/unarchive`, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error unarchiving fund:', error);
+        alert('Error unarchiving fund');
+    });
+}
+
+function deleteFund(fundId, fundName) {
+    if (!confirm(`Are you sure you want to DELETE "${fundName}"?\n\nThis will permanently delete:\n- All months\n- All assignments\n- All payments\n\nThis action CANNOT be undone!`)) {
+        return;
+    }
+    
+    if (!confirm('This is your final warning. Are you absolutely sure?')) {
+        return;
+    }
+    
+    fetch(`/funds/${fundId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error deleting fund:', error);
+        alert('Error deleting fund');
+    });
+}
+
+function toggleGuestVisible(fundId) {
+    fetch(`/api/funds/${fundId}/toggle-guest-visible`, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error toggling guest visibility:', error);
+        alert('Error toggling guest visibility');
+    });
+}
+
 function saveFundName() {
-    const fundId = document.getElementById('editFundId').value;
-    const name = document.getElementById('editFundName').value;
-    const description = document.getElementById('editFundDescription').value;
+    const editFundId = document.getElementById('editFundId');
+    const editFundName = document.getElementById('editFundName');
+    const editFundDescription = document.getElementById('editFundDescription');
+    
+    if (!editFundId || !editFundName || !editFundDescription) {
+        console.error('Form elements not found');
+        alert('Error: Could not find form elements');
+        return;
+    }
+    
+    const fundId = editFundId.value;
+    const name = editFundName.value;
+    const description = editFundDescription.value;
+    
+    if (!fundId || !name) {
+        alert('Fund ID and Name are required');
+        return;
+    }
     
     fetch(`/api/funds/${fundId}`, {
         method: 'PUT',
@@ -206,21 +353,28 @@ function saveFundName() {
         },
         body: JSON.stringify({
             name: name,
-            description: description
+            description: description || ''
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.message) {
+            alert(data.message);
             location.reload();
         }
     })
     .catch(error => {
         console.error('Error updating fund:', error);
-        alert('Error updating fund. Please try again.');
+        alert('Error updating fund: ' + error.message);
     });
 }
 </script>
 {% endblock %}
 {% endif %}
+
 

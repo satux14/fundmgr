@@ -40,8 +40,8 @@
     </div>
 </div>
 
-{% if user.role != "admin" and user not in fund.members %}
 <!-- Join Fund Section for non-members -->
+{% if not is_member and user.role != "guest" %}
 <div class="row mb-4">
     <div class="col-12">
         <div class="alert alert-info">
@@ -90,8 +90,8 @@
                                 <th>Monthly Installment</th>
                                 <th>Monthly Payment</th>
                                 <th>Installment Status</th>
-                                <th>Payment Received Status</th>
-                                <th>Actions</th>
+                                <th>All Installment Received Status</th>
+                                <th>Monthly Payment Done</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -155,55 +155,25 @@
                                     <span class="badge bg-danger">Not Paid</span>
                                     {% endif %}
                                 </td>
-                                <td style="max-width: 100px; word-wrap: break-word;">
-                                    <div class="d-flex flex-column gap-1" style="font-size: 0.875rem;">
-                                        {% if month.is_taken %}
-                                        <div>
-                                            {% if month.monthly_payment_status == "verified" %}
-                                            <span class="badge bg-success">✓ Received</span>
-                                            {% elif month.monthly_payment_status == "pending" %}
-                                            <span class="badge bg-warning">Pending</span>
-                                            {% elif month.monthly_payment_status == "rejected" %}
-                                            <span class="badge bg-danger">Rejected</span>
-                                            {% else %}
-                                            <span class="badge bg-secondary">Not Received</span>
-                                            {% endif %}
-                                        </div>
-                                        {% endif %}
-                                        <div>
-                                            <span class="badge {% if month.verified_installments_count == month.total_users %}bg-success{% elif month.verified_installments_count > 0 %}bg-warning{% else %}bg-danger{% endif %}">
-                                                {{ month.verified_installments_count }}/{{ month.total_users }} paid
-                                            </span>
-                                        </div>
-                                    </div>
+                                <td>
+                                    <span class="badge {% if month.verified_installments_count == month.total_users %}bg-success{% elif month.verified_installments_count > 0 %}bg-warning{% else %}bg-danger{% endif %}">
+                                        {{ month.verified_installments_count }}/{{ month.total_users }} paid
+                                    </span>
                                 </td>
                                 <td>
-                                    <div class="d-flex flex-column gap-1">
-                                        {% if user.role == "admin" %}
-                                            {# Admin can mark payment received for any month #}
-                                            {% if not month.monthly_payment_status or month.monthly_payment_status == "rejected" %}
-                                            <button class="btn btn-sm btn-primary mark-monthly-payment-received" 
-                                                    data-month-id="{{ month.id }}"
-                                                    data-payment-amount="{{ month.payment_amount }}">
-                                                Mark ₹{{ "{:,.2f}".format(month.payment_amount) }} Received
-                                            </button>
-                                            {% endif %}
-                                        {% elif month.is_taken and (not month.monthly_payment_status or month.monthly_payment_status == "rejected") %}
-                                            {# Regular users can only mark their own assigned month #}
-                                            <button class="btn btn-sm btn-primary mark-monthly-payment-received" 
-                                                    data-month-id="{{ month.id }}"
-                                                    data-payment-amount="{{ month.payment_amount }}">
-                                                Mark ₹{{ "{:,.2f}".format(month.payment_amount) }} Received
-                                            </button>
+                                    {% if month.is_taken %}
+                                        {% if month.monthly_payment_status == "verified" %}
+                                        <span class="badge bg-success">✓ Done</span>
+                                        {% elif month.monthly_payment_status == "pending" %}
+                                        <span class="badge bg-warning">Pending</span>
+                                        {% elif month.monthly_payment_status == "rejected" %}
+                                        <span class="badge bg-danger">Rejected</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Not Done</span>
                                         {% endif %}
-                                        {% if not month.installment_payment_status or month.installment_payment_status == "rejected" %}
-                                        <button class="btn btn-sm btn-primary pay-installment-btn" 
-                                                data-month-id="{{ month.id }}"
-                                                data-installment-amount="{{ month.installment_amount }}">
-                                            Pay Installment
-                                        </button>
-                                        {% endif %}
-                                    </div>
+                                    {% else %}
+                                        <span class="badge bg-secondary">N/A</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}

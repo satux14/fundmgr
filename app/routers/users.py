@@ -8,6 +8,7 @@ from app.models import User, Month, UserMonthAssignment, InstallmentPayment, Fun
 from app.schemas import MonthWithStatus
 from app.dependencies import get_current_fund
 from app.helpers import get_user_display_info
+from app.audit import log_action
 from datetime import datetime
 import pytz
 
@@ -15,6 +16,20 @@ router = APIRouter()
 import os
 template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
 templates = Jinja2Templates(directory=template_dir)
+
+# Add IST timezone filter to templates
+from app.timezone_utils import utc_to_ist
+import pytz
+IST = pytz.timezone('Asia/Kolkata')
+
+def format_ist(dt, format_str='%Y-%m-%d %H:%M:%S'):
+    """Jinja2 filter to format datetime in IST"""
+    if dt is None:
+        return None
+    ist_dt = utc_to_ist(dt)
+    return ist_dt.strftime(format_str)
+
+templates.env.filters['ist'] = format_ist
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def user_dashboard(
@@ -42,9 +57,22 @@ async def user_dashboard(
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url="/funds", status_code=302)
     
+    # Check if fund is archived or deleted - non-admin users cannot access
+    if current_user.role != "admin":
+        if current_fund.is_deleted or current_fund.is_archived:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/funds", status_code=302)
+    
+    # Check access - guest users can only access guest-visible funds
+    if current_user.role == "guest":
+        if not current_fund.guest_visible:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/funds", status_code=302)
+    
     # Check access - allow non-members to view but show join option
     # Admin can always access, members can access, non-members can view but need to join
     # We'll show a join button in the template for non-members
+    # Guest users cannot join funds
     # Get all months for this fund
     months = db.query(Month).filter(Month.fund_id == current_fund.id).order_by(Month.month_number).all()
     
@@ -185,6 +213,9 @@ async def user_dashboard(
         else:
             month_data["is_current_month"] = False
     
+    # Check if current user is a member of the fund
+    is_member = current_user in current_fund.members
+    
     # Set cookie for fund_id and return response
     response = templates.TemplateResponse(
         "user_dashboard.html",
@@ -195,7 +226,8 @@ async def user_dashboard(
             "months": months_data,
             "all_users": all_users,
             "total_paid_installments": total_paid_installments,
-            "total_installment_amount": total_installment_amount
+            "total_installment_amount": total_installment_amount,
+            "is_member": is_member
         }
     )
     response.set_cookie(key="current_fund_id", value=str(current_fund.id), httponly=True)
@@ -293,6 +325,29 @@ async def mark_payment(
             existing.transaction_id = transaction_id if transaction_id else None
             existing.transaction_type = transaction_type if transaction_type else None
             db.commit()
+            
+            # Log action
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                action_type="INSTALLMENT_PAID",
+                action_description=f"Payment re-submitted for {target_user.username} - Month: {month.month_name}, Amount: ₹{month.installment_amount:,.2f}",
+                request=request,
+                fund_id=month.fund_id,
+                details={
+                    "payment_id": existing.id,
+                    "user_id": target_user.id,
+                    "username": target_user.username,
+                    "month_id": month_id,
+                    "month_name": month.month_name,
+                    "amount": float(month.installment_amount),
+                    "payment_date": payment_date_str,
+                    "transaction_id": transaction_id,
+                    "transaction_type": transaction_type,
+                    "marked_by_admin": current_user.role == "admin"
+                }
+            )
+            
             return {"message": "Payment re-submitted successfully", "payment_id": existing.id}
         return {"message": "Payment already marked", "payment_id": existing.id}
     
@@ -310,10 +365,33 @@ async def mark_payment(
     db.commit()
     db.refresh(payment)
     
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="INSTALLMENT_PAID",
+        action_description=f"Payment marked for {target_user.username} - Month: {month.month_name}, Amount: ₹{month.installment_amount:,.2f}",
+        request=request,
+        fund_id=month.fund_id,
+        details={
+            "payment_id": payment.id,
+            "user_id": target_user.id,
+            "username": target_user.username,
+            "month_id": month_id,
+            "month_name": month.month_name,
+            "amount": float(month.installment_amount),
+            "payment_date": payment_date_str,
+            "transaction_id": transaction_id,
+            "transaction_type": transaction_type,
+            "marked_by_admin": current_user.role == "admin"
+        }
+    )
+    
     return {"message": "Payment marked successfully", "payment_id": payment.id}
 
 @router.post("/api/user/monthly-payment/mark-received")
 async def mark_monthly_payment_received_user(
+    request: Request,
     month_id: int = Form(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -362,6 +440,24 @@ async def mark_monthly_payment_received_user(
     db.commit()
     db.refresh(monthly_payment)
     
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="MONTHLY_PAYMENT_MARKED",
+        action_description=f"Monthly payment marked as received - Month: {month.month_name}, Amount: ₹{month.payment_amount:,.2f}",
+        request=request,
+        fund_id=month.fund_id,
+        details={
+            "payment_id": monthly_payment.id,
+            "month_id": month_id,
+            "month_name": month.month_name,
+            "amount": float(month.payment_amount),
+            "user_id": current_user.id,
+            "username": current_user.username
+        }
+    )
+    
     return {"message": "Payment receipt marked successfully", "payment_id": monthly_payment.id}
 
 # New endpoints for editing
@@ -376,6 +472,7 @@ class AssignUserRequest(BaseModel):
 
 @router.put("/api/dashboard/month/{month_id}/installment")
 async def update_installment(
+    request: Request,
     month_id: int,
     request_data: UpdateAmountRequest,
     current_user: User = Depends(get_current_admin_user),
@@ -385,12 +482,31 @@ async def update_installment(
     if not month:
         raise HTTPException(status_code=404, detail="Month not found")
     
+    old_amount = month.installment_amount
     month.installment_amount = request_data.amount
     db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="INSTALLMENT_AMOUNT_UPDATED",
+        action_description=f"Installment amount updated for {month.month_name} - From ₹{old_amount:,.2f} to ₹{request_data.amount:,.2f}",
+        request=request,
+        fund_id=month.fund_id,
+        details={
+            "month_id": month_id,
+            "month_name": month.month_name,
+            "old_amount": float(old_amount),
+            "new_amount": float(request_data.amount)
+        }
+    )
+    
     return {"message": "Installment amount updated", "amount": request_data.amount}
 
 @router.put("/api/dashboard/month/{month_id}/payment")
 async def update_payment(
+    request: Request,
     month_id: int,
     request_data: UpdateAmountRequest,
     current_user: User = Depends(get_current_admin_user),
@@ -400,12 +516,31 @@ async def update_payment(
     if not month:
         raise HTTPException(status_code=404, detail="Month not found")
     
+    old_amount = month.payment_amount
     month.payment_amount = request_data.amount
     db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="PAYMENT_AMOUNT_UPDATED",
+        action_description=f"Payment amount updated for {month.month_name} - From ₹{old_amount:,.2f} to ₹{request_data.amount:,.2f}",
+        request=request,
+        fund_id=month.fund_id,
+        details={
+            "month_id": month_id,
+            "month_name": month.month_name,
+            "old_amount": float(old_amount),
+            "new_amount": float(request_data.amount)
+        }
+    )
+    
     return {"message": "Payment amount updated", "amount": request_data.amount}
 
 @router.put("/api/dashboard/month/{month_id}/assign")
 async def assign_month_to_user(
+    request: Request,
     month_id: int,
     request_data: AssignUserRequest,
     current_user: User = Depends(get_current_admin_user),
@@ -424,8 +559,25 @@ async def assign_month_to_user(
             UserMonthAssignment.month_id == month_id
         ).first()
         if existing:
+            old_user_id = existing.user_id
             db.delete(existing)
             db.commit()
+            
+            # Log action
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                action_type="MONTH_ASSIGNED",
+                action_description=f"Month {month.month_name} assignment removed",
+                request=request,
+                fund_id=month.fund_id,
+                details={
+                    "month_id": month_id,
+                    "month_name": month.month_name,
+                    "old_user_id": old_user_id,
+                    "action": "removed"
+                }
+            )
         return {"message": "Assignment removed", "user_id": None, "username": None}
     
     # Verify user exists
@@ -438,7 +590,9 @@ async def assign_month_to_user(
         UserMonthAssignment.month_id == month_id
     ).first()
     
+    old_user_id = None
     if existing:
+        old_user_id = existing.user_id
         # Update existing assignment
         existing.user_id = user.id
         existing.assigned_by = current_user.id
@@ -453,6 +607,26 @@ async def assign_month_to_user(
         db.add(assignment)
     
     db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="MONTH_ASSIGNED",
+        action_description=f"Month {month.month_name} assigned to {user.full_name} ({user.username})",
+        request=request,
+        fund_id=month.fund_id,
+        details={
+            "month_id": month_id,
+            "month_name": month.month_name,
+            "user_id": user.id,
+            "username": user.username,
+            "full_name": user.full_name,
+            "old_user_id": old_user_id,
+            "is_update": existing is not None
+        }
+    )
+    
     return {"message": f"Month assigned to {user.full_name}", "user_id": user.id, "username": user.username}
 
 @router.get("/change-password", response_class=HTMLResponse)
@@ -520,6 +694,15 @@ async def change_password(
     # Update password
     current_user.password_hash = get_password_hash(new_password)
     db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="PASSWORD_CHANGED",
+        action_description=f"User {current_user.username} changed their password",
+        request=request
+    )
     
     return templates.TemplateResponse(
         "change_password.html",

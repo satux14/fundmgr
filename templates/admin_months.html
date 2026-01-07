@@ -208,7 +208,7 @@ const monthDetailsData = {
                 },
                 payment: {% if mp.payment %}{
                     id: {{ mp.payment.id }},
-                    paid_at: '{{ mp.payment.paid_at.strftime("%Y-%m-%d %H:%M:%S") if mp.payment.paid_at else "" }}',
+                    paid_at: '{{ mp.payment.paid_at | ist("%Y-%m-%d %H:%M:%S") if mp.payment.paid_at else "" }}',
                     marked_by_user: {% if mp.payment.marked_by_user %}{
                         full_name: '{{ mp.payment.marked_by_user.full_name|replace("'", "\\'") }}'
                     }{% else %}null{% endif %},

@@ -11,6 +11,7 @@ from app.models import UserMonthAssignment as UMA  # Import with alias to avoid 
 from app.schemas import UserCreate, UserResponse
 from app.dependencies import get_current_fund, get_optional_fund
 from app.helpers import get_user_display_info
+from app.audit import log_action
 from typing import Optional
 
 router = APIRouter()
@@ -18,6 +19,20 @@ logger = logging.getLogger(__name__)
 import os
 template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
 templates = Jinja2Templates(directory=template_dir)
+
+# Add IST timezone filter to templates
+from app.timezone_utils import utc_to_ist
+import pytz
+IST = pytz.timezone('Asia/Kolkata')
+
+def format_ist(dt, format_str='%Y-%m-%d %H:%M:%S'):
+    """Jinja2 filter to format datetime in IST"""
+    if dt is None:
+        return None
+    ist_dt = utc_to_ist(dt)
+    return ist_dt.strftime(format_str)
+
+templates.env.filters['ist'] = format_ist
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(
@@ -89,6 +104,23 @@ async def create_user(
     )
     db.add(new_user)
     db.commit()
+    db.refresh(new_user)
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="USER_CREATED",
+        action_description=f"New user created: {username} ({full_name}) - Role: {role}, Customer ID: {new_customer_id}",
+        request=request,
+        details={
+            "new_user_id": new_user.id,
+            "username": username,
+            "full_name": full_name,
+            "role": role,
+            "customer_id": new_customer_id
+        }
+    )
     
     return RedirectResponse(url="/admin/users", status_code=302)
 
@@ -185,6 +217,20 @@ async def admin_reset_password(
     # Update password
     user.password_hash = get_password_hash(new_password)
     db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="PASSWORD_RESET_BY_ADMIN",
+        action_description=f"Admin reset password for user: {user.username} ({user.full_name})",
+        request=request,
+        details={
+            "target_user_id": user.id,
+            "target_username": user.username,
+            "target_full_name": user.full_name
+        }
+    )
     
     return RedirectResponse(url="/admin/users", status_code=302)
 
@@ -419,7 +465,9 @@ async def assign_month(
             fund.members.append(assigned_user)
             logger.info(f"assign_month: Added user {assigned_user.full_name} to fund {fund.name}")
         
+        old_user_id = None
         if existing:
+            old_user_id = existing.user_id
             # Update existing assignment
             existing.user_id = user_id
             existing.assigned_by = current_user.id
@@ -432,12 +480,49 @@ async def assign_month(
                 assigned_by=current_user.id
             )
             db.add(assignment)
+        
+        db.commit()
+        
+        # Log action
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action_type="MONTH_ASSIGNED",
+            action_description=f"Month {month.month_name} assigned to {assigned_user.full_name} ({assigned_user.username})",
+            request=request,
+            fund_id=fund_id,
+            details={
+                "month_id": month_id,
+                "month_name": month.month_name,
+                "user_id": user_id,
+                "username": assigned_user.username,
+                "full_name": assigned_user.full_name,
+                "old_user_id": old_user_id,
+                "is_update": existing is not None
+            }
+        )
     else:
         # Remove assignment if user_id is empty
         if existing:
+            old_user_id = existing.user_id
             db.delete(existing)
-    
-    db.commit()
+            db.commit()
+            
+            # Log action
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                action_type="MONTH_ASSIGNED",
+                action_description=f"Month {month.month_name} assignment removed",
+                request=request,
+                fund_id=fund_id,
+                details={
+                    "month_id": month_id,
+                    "month_name": month.month_name,
+                    "old_user_id": old_user_id,
+                    "action": "removed"
+                }
+            )
     
     # Preserve fund_id in redirect and set cookie
     response = RedirectResponse(url=f"/admin/months?fund_id={fund_id}", status_code=302)
@@ -556,6 +641,26 @@ async def verify_payment(
     payment.verified_by = current_user.id
     db.commit()
     
+    # Log action
+    month = db.query(Month).filter(Month.id == payment.month_id).first()
+    fund_id = month.fund_id if month else None
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="PAYMENT_VERIFIED",
+        action_description=f"Payment verified - Payment ID: {payment_id}, User: {payment.user.username}, Amount: ₹{month.installment_amount:,.2f}",
+        request=request,
+        fund_id=fund_id,
+        details={
+            "payment_id": payment_id,
+            "user_id": payment.user_id,
+            "username": payment.user.username,
+            "month_id": payment.month_id,
+            "month_name": month.month_name if month else None,
+            "amount": float(month.installment_amount) if month else None
+        }
+    )
+    
     # Check if this is an AJAX request (from modal) - check for AJAX-specific headers
     is_ajax = False
     if request:
@@ -592,6 +697,26 @@ async def reject_payment(
     payment.verified_by = current_user.id
     db.commit()
     
+    # Log action
+    month = db.query(Month).filter(Month.id == payment.month_id).first()
+    fund_id = month.fund_id if month else None
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="PAYMENT_REJECTED",
+        action_description=f"Payment rejected - Payment ID: {payment_id}, User: {payment.user.username}, Amount: ₹{month.installment_amount:,.2f}",
+        request=request,
+        fund_id=fund_id,
+        details={
+            "payment_id": payment_id,
+            "user_id": payment.user_id,
+            "username": payment.user.username,
+            "month_id": payment.month_id,
+            "month_name": month.month_name if month else None,
+            "amount": float(month.installment_amount) if month else None
+        }
+    )
+    
     # Check if this is an AJAX/fetch request (from modal)
     # Look for X-Requested-With header or Accept header containing application/json
     is_ajax = False
@@ -612,6 +737,7 @@ async def reject_payment(
 
 @router.post("/admin/payments/delete")
 async def delete_payment(
+    request: Request,
     payment_id: int = Form(...),
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
@@ -623,10 +749,32 @@ async def delete_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
     
-    # Get fund_id before deleting
-    fund_id = payment.month.fund_id
+    # Get details before deleting
+    month = db.query(Month).filter(Month.id == payment.month_id).first()
+    fund_id = payment.month.fund_id if payment.month else None
+    payment_details = {
+        "payment_id": payment_id,
+        "user_id": payment.user_id,
+        "username": payment.user.username if payment.user else None,
+        "month_id": payment.month_id,
+        "month_name": month.month_name if month else None,
+        "amount": float(month.installment_amount) if month else None,
+        "status": payment.status
+    }
+    
     db.delete(payment)
     db.commit()
+    
+    # Log action
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action_type="PAYMENT_DELETED",
+        action_description=f"Payment deleted - Payment ID: {payment_id}, User: {payment.user.username if payment.user else 'Unknown'}, Status: {payment.status}",
+        request=request,
+        fund_id=fund_id,
+        details=payment_details
+    )
     
     return RedirectResponse(url=f"/admin/payments?fund_id={fund_id}", status_code=302)
 
@@ -700,6 +848,25 @@ async def mark_monthly_payment_received(
         existing.status = "pending"
         existing.received_at = datetime.utcnow()
         existing.marked_by = current_user.id
+        db.commit()
+        
+        # Log action
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action_type="MONTHLY_PAYMENT_MARKED",
+            action_description=f"Monthly payment marked as received (updated) - Month: {month.month_name}, User: {assignment.user.full_name}, Amount: ₹{month.payment_amount:,.2f}",
+            request=request,
+            fund_id=month.fund_id,
+            details={
+                "payment_id": existing.id,
+                "month_id": month_id,
+                "month_name": month.month_name,
+                "user_id": assignment.user_id,
+                "username": assignment.user.username if assignment.user else None,
+                "amount": float(month.payment_amount)
+            }
+        )
     else:
         # Create new
         monthly_payment = MonthlyPaymentReceived(
@@ -710,8 +877,26 @@ async def mark_monthly_payment_received(
             status="pending"
         )
         db.add(monthly_payment)
-    
-    db.commit()
+        db.commit()
+        db.refresh(monthly_payment)
+        
+        # Log action
+        log_action(
+            db=db,
+            user_id=current_user.id,
+            action_type="MONTHLY_PAYMENT_MARKED",
+            action_description=f"Monthly payment marked as received - Month: {month.month_name}, User: {assignment.user.full_name}, Amount: ₹{month.payment_amount:,.2f}",
+            request=request,
+            fund_id=month.fund_id,
+            details={
+                "payment_id": monthly_payment.id,
+                "month_id": month_id,
+                "month_name": month.month_name,
+                "user_id": assignment.user_id,
+                "username": assignment.user.username if assignment.user else None,
+                "amount": float(month.payment_amount)
+            }
+        )
     
     # Check if this is an AJAX request
     is_ajax = False
@@ -788,4 +973,140 @@ async def delete_monthly_payment(
     db.commit()
     
     return RedirectResponse(url=f"/admin/payments?fund_id={fund_id}", status_code=302)
+
+@router.get("/admin/audit", response_class=HTMLResponse)
+async def admin_audit(
+    request: Request,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+    action_type: Optional[str] = None,
+    user_id: Optional[int] = None,
+    fund_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 50
+):
+    """Admin audit log page with filtering and pagination"""
+    from app.models import AuditLog
+    from sqlalchemy import or_, func
+    from datetime import datetime
+    
+    # Build query
+    query = db.query(AuditLog)
+    
+    # Apply filters
+    if action_type:
+        query = query.filter(AuditLog.action_type == action_type)
+    
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    
+    if fund_id:
+        query = query.filter(AuditLog.fund_id == fund_id)
+    
+    if date_from:
+        try:
+            date_from_obj = datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(AuditLog.created_at >= date_from_obj)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            date_to_obj = datetime.strptime(date_to, "%Y-%m-%d")
+            # Add one day to include the entire day
+            from datetime import timedelta
+            date_to_obj = date_to_obj + timedelta(days=1)
+            query = query.filter(AuditLog.created_at < date_to_obj)
+        except ValueError:
+            pass
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                AuditLog.action_description.like(search_term),
+                AuditLog.details.like(search_term)
+            )
+        )
+    
+    # Get total count for pagination
+    total_count = query.count()
+    
+    # Order by created_at descending (newest first)
+    query = query.order_by(AuditLog.created_at.desc())
+    
+    # Apply pagination
+    offset = (page - 1) * per_page
+    audit_logs = query.offset(offset).limit(per_page).all()
+    
+    # Calculate pagination info
+    total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+    
+    # Get all action types for filter dropdown
+    action_types = db.query(AuditLog.action_type).distinct().order_by(AuditLog.action_type).all()
+    action_types = [at[0] for at in action_types]
+    
+    # Get all users for filter dropdown
+    all_users = db.query(User).order_by(User.username).all()
+    
+    # Get all funds for filter dropdown
+    all_funds = db.query(Fund).filter(Fund.is_deleted == False).order_by(Fund.name).all()
+    
+    # Format audit logs with user display info
+    formatted_logs = []
+    for log in audit_logs:
+        user_display = None
+        if log.user:
+            user_display = get_user_display_info(log.user, current_user)
+        
+        fund_name = None
+        if log.fund:
+            fund_name = log.fund.name
+        
+        # Parse details JSON if available
+        details_dict = None
+        if log.details:
+            try:
+                import json
+                details_dict = json.loads(log.details)
+            except (json.JSONDecodeError, TypeError):
+                details_dict = {"raw": log.details}
+        
+        formatted_logs.append({
+            "log": log,
+            "user_display": user_display,
+            "fund_name": fund_name,
+            "details": details_dict
+        })
+    
+    return templates.TemplateResponse(
+        "admin_audit.html",
+        {
+            "request": request,
+            "user": current_user,
+            "audit_logs": formatted_logs,
+            "action_types": action_types,
+            "all_users": all_users,
+            "all_funds": all_funds,
+            "current_filters": {
+                "action_type": action_type,
+                "user_id": user_id,
+                "fund_id": fund_id,
+                "date_from": date_from,
+                "date_to": date_to,
+                "search": search
+            },
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "has_prev": page > 1,
+                "has_next": page < total_pages
+            }
+        }
+    )
 

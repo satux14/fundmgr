@@ -21,6 +21,9 @@ class Fund(Base):
     number_of_months = Column(Integer, default=10)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_archived = Column(Boolean, default=False, nullable=False)
+    is_deleted = Column(Boolean, default=False, nullable=False)
+    guest_visible = Column(Boolean, default=False, nullable=False)  # Indicates if fund is visible to guest users
     
     # Relationships
     months = relationship("Month", back_populates="fund", cascade="all, delete-orphan")
@@ -36,7 +39,7 @@ class User(Base):
     full_name = Column(String, nullable=False)
     customer_id = Column(String, unique=True, index=True, nullable=True)  # Unique customer identifier
     alias = Column(String, nullable=True)  # Display alias for privacy
-    role = Column(String, default="user")  # "user" or "admin"
+    role = Column(String, default="user")  # "user", "admin", or "guest"
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships - specify primaryjoin to avoid ambiguity with multiple foreign keys
@@ -125,4 +128,21 @@ class MonthlyPaymentReceived(Base):
     user = relationship("User", foreign_keys=[user_id], back_populates="monthly_payments_received")
     marked_by_user = relationship("User", foreign_keys=[marked_by], viewonly=True)
     verified_by_user = relationship("User", foreign_keys=[verified_by], viewonly=True)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # Nullable for anonymous actions
+    action_type = Column(String, nullable=False, index=True)  # LOGIN, LOGOUT, PAYMENT_VERIFIED, etc.
+    action_description = Column(String, nullable=False)  # Human-readable description
+    ip_address = Column(String, nullable=True)  # Client IP address
+    user_agent = Column(String, nullable=True)  # Browser/user agent string
+    details = Column(String, nullable=True)  # JSON string with additional details
+    fund_id = Column(Integer, ForeignKey("funds.id"), nullable=True, index=True)  # Related fund if applicable
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id], viewonly=True)
+    fund = relationship("Fund", foreign_keys=[fund_id], viewonly=True)
 

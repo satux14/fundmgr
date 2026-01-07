@@ -19,6 +19,11 @@ else
     python migrate_add_monthly_payment.py
     python migrate_add_customer_fields.py
     python migrate_add_payment_fields.py
+    python migrate_add_fund_status.py
+    python migrate_add_audit_log.py
+    python migrate_add_guest_visible.py
+    # Ensure guest user exists
+    python create_guest_user.py
 fi
 
 # Start the application
