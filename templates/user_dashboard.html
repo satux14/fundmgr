@@ -92,6 +92,7 @@
                                 <th>Installment Status</th>
                                 <th>All Installment Received Status</th>
                                 <th>Monthly Payment Done</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -161,19 +162,43 @@
                                     </span>
                                 </td>
                                 <td>
-                                    {% if month.is_taken %}
-                                        {% if month.monthly_payment_status == "verified" %}
-                                        <span class="badge bg-success">✓ Done</span>
-                                        {% elif month.monthly_payment_status == "pending" %}
-                                        <span class="badge bg-warning">Pending</span>
-                                        {% elif month.monthly_payment_status == "rejected" %}
-                                        <span class="badge bg-danger">Rejected</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Not Done</span>
-                                        {% endif %}
+                                    {% if month.monthly_payment_status == "verified" %}
+                                    <span class="badge bg-success">✓ Done</span>
+                                    {% elif month.monthly_payment_status == "pending" %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% elif month.monthly_payment_status == "rejected" %}
+                                    <span class="badge bg-danger">Rejected</span>
                                     {% else %}
-                                        <span class="badge bg-secondary">N/A</span>
+                                    <span class="badge bg-secondary">Not Done</span>
                                     {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1">
+                                        {% if user.role == "admin" %}
+                                            {# Admin can mark payment received for any month #}
+                                            {% if not month.monthly_payment_status or month.monthly_payment_status == "rejected" %}
+                                            <button class="btn btn-sm btn-primary mark-monthly-payment-received" 
+                                                    data-month-id="{{ month.id }}"
+                                                    data-payment-amount="{{ month.payment_amount }}">
+                                                Mark ₹{{ "{:,.2f}".format(month.payment_amount) }} Received
+                                            </button>
+                                            {% endif %}
+                                        {% elif month.is_taken and (not month.monthly_payment_status or month.monthly_payment_status == "rejected") %}
+                                            {# Regular users can only mark their own assigned month #}
+                                            <button class="btn btn-sm btn-primary mark-monthly-payment-received" 
+                                                    data-month-id="{{ month.id }}"
+                                                    data-payment-amount="{{ month.payment_amount }}">
+                                                Mark ₹{{ "{:,.2f}".format(month.payment_amount) }} Received
+                                            </button>
+                                        {% endif %}
+                                        {% if not month.installment_payment_status or month.installment_payment_status == "rejected" %}
+                                        <button class="btn btn-sm btn-primary pay-installment-btn" 
+                                                data-month-id="{{ month.id }}"
+                                                data-installment-amount="{{ month.installment_amount }}">
+                                            Pay Installment
+                                        </button>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -182,6 +207,7 @@
                             <tr class="table-info">
                                 <td colspan="1"><strong>Total</strong></td>
                                 <td><strong>₹{{ "{:,.2f}".format(total_installment_amount) }}</strong></td>
+                                <td></td>
                                 <td></td>
                                 <td></td>
                                 <td></td>

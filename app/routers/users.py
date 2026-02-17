@@ -146,15 +146,15 @@ async def user_dashboard(
         payment.month.installment_amount for payment in all_verified_installments
     )
     
-    # Create a map: month_id -> set of user_ids who paid
+    # Create a map: month_id -> list of all payments (count all payments, not unique users)
     verified_installments_map = {}
     for payment in all_verified_installments:
         if payment.month_id not in verified_installments_map:
-            verified_installments_map[payment.month_id] = set()
-        verified_installments_map[payment.month_id].add(payment.user_id)
+            verified_installments_map[payment.month_id] = []
+        verified_installments_map[payment.month_id].append(payment.user_id)
     
-    # Get total number of months in the fund (for display: X/10 for a 10-month fund)
-    # This represents the total number of installments that should be paid
+    # Get total number of months in the fund (for display: X/10 means X payments out of 10 total months)
+    # This represents the total number of installments that should be paid (one per month)
     total_users = len(months)
     
     # Build month data with status
@@ -166,8 +166,8 @@ async def user_dashboard(
         assignment = assignment_map.get(month.id)
         assigned_user = assignment.user if assignment else None
         
-        # Count verified installment payments for this month
-        verified_count = len(verified_installments_map.get(month.id, set()))
+        # Count verified installment payments for this month (count all payments, not unique users)
+        verified_count = len(verified_installments_map.get(month.id, []))
         
         # For "Payment Received Status", we need to show how many installments have been paid
         # out of the total number of fund members (since each member should pay for each month)
@@ -349,7 +349,8 @@ async def mark_payment(
             )
             
             return {"message": "Payment re-submitted successfully", "payment_id": existing.id}
-        return {"message": "Payment already marked", "payment_id": existing.id}
+        # If existing payment is pending or verified, allow creating a new payment entry
+        # This allows multiple payments to be submitted for the same user/month
     
     # Create new payment
     payment = InstallmentPayment(

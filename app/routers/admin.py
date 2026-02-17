@@ -802,7 +802,8 @@ async def mark_payment_on_behalf(
             existing.marked_by = current_user.id
             db.commit()
             return {"message": "Payment re-submitted successfully", "payment_id": existing.id}
-        return {"message": "Payment already marked", "payment_id": existing.id}
+        # If existing payment is pending or verified, allow creating a new payment entry
+        # This allows multiple payments to be submitted for the same user/month
     
     # Create new payment
     payment = InstallmentPayment(
