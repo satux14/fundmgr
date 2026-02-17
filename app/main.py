@@ -7,6 +7,9 @@ from app.database import engine, Base
 from app.routers import auth, users, admin, payments, funds
 import logging
 
+from srs_audit import init_audit
+from srs_audit.fastapi import AuditMiddleware, metrics_route
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -14,8 +17,19 @@ logger = logging.getLogger(__name__)
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Initialize shared audit library (uses same SQLite DB)
+audit_logger = init_audit(service_name="fundmgr", db_engine=engine, version="1.0.0")
+
 # Create FastAPI app
 app = FastAPI(title="Fund Management System")
+
+# Audit middleware (must be added before CORS to capture all requests)
+app.add_middleware(
+    AuditMiddleware,
+    service_name="fundmgr",
+    db_engine=engine,
+    version="1.0.0",
+)
 
 # CORS middleware
 app.add_middleware(
@@ -30,6 +44,9 @@ app.add_middleware(
 import os
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Prometheus metrics endpoint
+app.include_router(metrics_route)
 
 # Include routers
 app.include_router(auth.router)
